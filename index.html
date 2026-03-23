@@ -1,0 +1,3109 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP Aktivite Raporu Analizörü</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222636;
+    --border: #2e3347;
+    --accent: #4f8ef7;
+    --accent2: #7c5cbf;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --orange: #f97316;   /* legacy — artık sadece wd-editor yarım gün için */
+    --over: #38bdf8;     /* mesai / beklenti üstü — sky-400 mavi */
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* NAV */
+  .nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: 56px;
+  }
+  .nav-logo {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--accent);
+    margin-right: 32px;
+    white-space: nowrap;
+  }
+  .nav-logo span { color: var(--text2); font-weight: 400; }
+  .nav-tabs { display: flex; gap: 4px; flex: 1; }
+  .nav-tab {
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text2);
+    font-weight: 500;
+    transition: all 0.15s;
+    white-space: nowrap;
+    border: none;
+    background: none;
+    font-size: 13px;
+  }
+  .nav-tab:hover { background: var(--surface2); color: var(--text); }
+  .nav-tab.active { background: var(--accent); color: #fff; }
+  .nav-tab.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .nav-info {
+    font-size: 12px;
+    color: var(--text3);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* PAGES */
+  .page { display: none; padding: 24px; max-width: 1600px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* UPLOAD PAGE */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 48px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative; /* input absolute konumlandırma için */
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(79,142,247,0.05); }
+  .upload-zone .icon { font-size: 48px; margin-bottom: 16px; }
+  .upload-zone h2 { font-size: 20px; margin-bottom: 8px; }
+  .upload-zone p { color: var(--text2); font-size: 13px; }
+  #file-input { display: none; }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 16px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-24 { margin-bottom: 24px; }
+
+  /* STAT CHIPS */
+  .stat-chip {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+  .stat-chip .label { font-size: 12px; color: var(--text3); margin-bottom: 4px; }
+  .stat-chip .value { font-size: 24px; font-weight: 700; }
+  .stat-chip .sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+  .accent { color: var(--accent); }
+  .green { color: var(--green); }
+  .yellow { color: var(--yellow); }
+  .red { color: var(--red); }
+  .orange { color: var(--orange); }
+
+  /* SELECT */
+  select, input[type=text], input[type=month], input[type=number] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+
+  /* BTN */
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #3d7ef5; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-danger { background: var(--red); color: #fff; }
+
+  /* CALENDAR */
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .cal-header {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text3);
+    padding: 6px 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .cal-day {
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    position: relative;
+    font-size: 11px;
+    cursor: default;
+    transition: transform 0.12s, box-shadow 0.12s;
+    min-height: 80px;
+    overflow: hidden;
+  }
+  .cal-day:hover { transform: translateY(-2px); z-index: 5; }
+  .cal-day.empty { background: transparent; min-height: 80px; }
+  .cal-day.weekend {
+    background: rgba(100,116,139,0.08);
+    border: 1px solid rgba(100,116,139,0.15);
+  }
+  .cal-day.holiday {
+    background: rgba(239,68,68,0.07);
+    border: 1px solid rgba(239,68,68,0.18);
+  }
+  .cal-day.work-day {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+  /* Tatil/haftasonu olarak işaretlenmiş ama saat girilmiş gün — soluk, greyed out */
+  .cal-day.offday-hours {
+    background: rgba(100,116,139,0.06);
+    border: 1px solid rgba(100,116,139,0.2);
+    opacity: 0.7;
+  }
+  .cal-day.offday-hours .day-num { color: var(--text3); }
+  .badge-offday {
+    background: rgba(100,116,139,0.2);
+    color: var(--text3);
+  }
+
+  /* Saat bazlı kenarlık renkleri */
+  .cal-day.under-hours {
+    border: 2px solid rgba(239,68,68,0.55) !important;
+    background: rgba(239,68,68,0.05) !important;
+  }
+  .cal-day.full-hours {
+    border: 2px solid var(--green) !important;
+    background: rgba(34,197,94,0.06) !important;
+  }
+  .cal-day.over-hours {
+    border: 2px solid var(--over) !important;
+    background: rgba(56,189,248,0.07) !important;
+    box-shadow: 0 0 12px rgba(56,189,248,0.3), inset 0 0 12px rgba(56,189,248,0.04);
+  }
+  .cal-day.zero-hours-work {
+    background: rgba(239,68,68,0.04) !important;
+    border: 1px dashed rgba(239,68,68,0.3) !important;
+  }
+
+  /* Hücre içi bölümler */
+  .cal-day-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px 4px;
+  }
+  .cal-day .day-num {
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .cal-day .day-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 6px;
+    letter-spacing: 0.03em;
+  }
+  .badge-over  { background: rgba(56,189,248,0.2); color: var(--over); }
+  .badge-full  { background: rgba(34,197,94,0.2);  color: var(--green); }
+  .badge-under { background: rgba(239,68,68,0.2);  color: var(--red); }
+  .badge-zero  { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-wknd  { background: rgba(100,116,139,0.2); color: var(--text3); }
+
+  /* Büyük saat göstergesi */
+  .cal-day .day-hours-big {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 0 8px 2px;
+    letter-spacing: -0.5px;
+  }
+
+  /* Proje listesi (metin) */
+  .cal-day .proj-list {
+    padding: 2px 8px 18px; /* alt kısım segment şeridine yer açıyor */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+  }
+  .cal-day .proj-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    color: var(--text2);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .cal-day .proj-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cal-day .proj-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    color: var(--text2);
+  }
+  .cal-day .proj-h {
+    font-weight: 700;
+    flex-shrink: 0;
+    color: var(--text);
+    font-size: 9px;
+  }
+  .cal-day .proj-more {
+    font-size: 9px;
+    color: var(--text3);
+    padding: 0 8px;
+  }
+
+  /* Alt renk şeridi (proje segmentleri) */
+  .cal-day .proj-segments {
+    position: absolute;
+    bottom: 6px;        /* border'dan yukarıda */
+    left: 6px;          /* kenarlarda iç boşluk */
+    right: 6px;
+    height: 4px;
+    display: flex;
+    gap: 2px;           /* segmentler arası küçük boşluk */
+    overflow: hidden;
+    border-radius: 4px; /* köşeleri yuvarla */
+    opacity: 0.85;
+  }
+  .cal-day .proj-segments > div {
+    border-radius: 4px; /* her segment de yuvarlak */
+  }
+
+  /* Tooltip */
+  .cal-day .day-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 50;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    min-width: 140px;
+  }
+  .cal-day:hover .day-tooltip { display: block; }
+  .cal-day .day-tooltip .tt-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+  }
+  .cal-day .day-tooltip .tt-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cal-day .day-tooltip .tt-sep {
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
+
+  /* PERSON SELECTOR */
+  .person-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .person-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+    color: var(--text2);
+  }
+  .person-chip:hover { border-color: var(--accent); color: var(--text); }
+  .person-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+  /* PROGRESS BAR */
+  .prog-bar-wrap { margin-bottom: 10px; }
+  .prog-label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; }
+  .prog-label .name { color: var(--text2); max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prog-label .val { color: var(--text); font-weight: 600; }
+  .prog-bar { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+
+  /* UTILIZATION */
+  .util-gauge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  .util-ring {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) var(--pct), var(--surface2) var(--pct));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .util-ring::before {
+    content: '';
+    width: 80px;
+    height: 80px;
+    background: var(--surface);
+    border-radius: 50%;
+    position: absolute;
+  }
+  .util-ring-val {
+    position: relative;
+    z-index: 1;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .util-label { margin-top: 8px; font-size: 12px; color: var(--text2); }
+
+  /* HEATMAP */
+  .heatmap-wrap { overflow-x: auto; }
+  .heatmap-table { border-collapse: separate; border-spacing: 3px; width: 100%; }
+  .heatmap-table th {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text3);
+    padding: 4px 6px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .heatmap-table td {
+    width: 32px;
+    height: 28px;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: default;
+    position: relative;
+  }
+  .heatmap-table td:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .hm-0 { background: var(--surface2); color: var(--text3); }
+
+  /* WORKDAY EDITOR */
+  .wd-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .wd-cell {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    min-height: 44px;
+  }
+  .wd-cell .wd-num { font-size: 13px; }
+  .wd-cell .wd-day { font-size: 9px; color: var(--text3); }
+  .wd-cell.work { background: rgba(79,142,247,0.15); border-color: var(--accent); color: var(--accent); }
+  .wd-cell.halfday { background: rgba(234,179,8,0.15); border-color: var(--yellow); color: var(--yellow); }
+  .wd-cell.halfday::after { content: '½'; position:absolute; top:2px; right:4px; font-size:9px; opacity:0.7; }
+  .wd-cell.nonwork { background: rgba(100,116,139,0.1); color: var(--text3); }
+  .wd-cell.weekend-def { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); color: var(--red); }
+
+  /* TABLE */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th {
+    background: var(--surface2);
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .data-table th:hover { color: var(--text); }
+  .data-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(46,51,71,0.5);
+    font-size: 13px;
+  }
+  .data-table tr:hover td { background: var(--surface2); }
+  .data-table .rank { color: var(--text3); font-weight: 700; font-size: 12px; }
+
+  /* BADGE */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-blue { background: rgba(79,142,247,0.2); color: var(--accent); }
+  .badge-green { background: rgba(34,197,94,0.2); color: var(--green); }
+  .badge-yellow { background: rgba(234,179,8,0.2); color: var(--yellow); }
+  .badge-red { background: rgba(239,68,68,0.2); color: var(--red); }
+
+  /* FLEX UTILS */
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .justify-between { justify-content: space-between; }
+  .flex-wrap { flex-wrap: wrap; }
+
+  /* PAGE TITLE */
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+  .page-title span { color: var(--text3); font-size: 14px; font-weight: 400; margin-left: 8px; }
+
+  /* SEPARATOR */
+  hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  /* CHART CONTAINER */
+  .chart-box { position: relative; }
+  .chart-box canvas { max-height: 300px; max-width: 100%; }
+
+  /* TEAM CALENDAR */
+  .tc-wrap { overflow-x: auto; }
+  .tc-table {
+    border-collapse: separate;
+    border-spacing: 3px;
+    width: 100%;
+    min-width: 600px;
+  }
+  /* Sabit sol sütun (gün etiketi) */
+  .tc-table .tc-day-col {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    z-index: 2;
+    min-width: 88px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .tc-table .tc-day-col.wknd  { color: var(--text3); background: rgba(100,116,139,0.08); border-color: rgba(100,116,139,0.15); }
+  .tc-table .tc-day-col.holid { color: var(--red);   background: rgba(239,68,68,0.06);   border-color: rgba(239,68,68,0.15); }
+  .tc-table .tc-day-col.today { color: var(--accent); border-color: var(--accent); }
+  /* Kişi başlığı */
+  .tc-table th.tc-person {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    padding: 6px 4px;
+    text-align: center;
+    white-space: nowrap;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: var(--surface2);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+  /* Veri hücresi */
+  .tc-cell {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 6px;
+    padding: 0;
+    width: 54px;
+    height: 38px;
+    vertical-align: middle;
+    cursor: default;
+    position: relative;
+    transition: transform 0.1s;
+  }
+  .tc-cell:hover { transform: scale(1.08); z-index: 4; }
+  /* Saat renk sınıfları */
+  .tc-cell.tc-empty   { background: var(--surface2); color: var(--text3); font-size:10px; }
+  .tc-cell.tc-zero    { background: rgba(239,68,68,0.06); color: var(--text3); border: 1px dashed rgba(239,68,68,0.25); }
+  .tc-cell.tc-under   { background: rgba(239,68,68,0.13); color: #fca5a5; border: 1px solid rgba(239,68,68,0.35); }
+  .tc-cell.tc-full    { background: rgba(34,197,94,0.14);  color: #86efac; border: 1px solid rgba(34,197,94,0.4); }
+  .tc-cell.tc-over    { background: rgba(56,189,248,0.13); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.4);
+                        box-shadow: 0 0 6px rgba(56,189,248,0.2); }
+  .tc-cell.tc-offday  { background: rgba(100,116,139,0.07); color: var(--text3); border: 1px solid rgba(100,116,139,0.15); opacity:0.65; }
+  .tc-cell.tc-wknd    { background: rgba(100,116,139,0.05); color: var(--text3); }
+  /* Tooltip */
+  .tc-cell .tc-tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 5px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 11px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 50;
+    pointer-events: none;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    font-weight: 400;
+    color: var(--text);
+    text-align: left;
+  }
+  .tc-cell:hover .tc-tip { display: block; }
+  /* Satır — haftasonu/tatil soluk */
+  .tc-row-wknd td.tc-cell   { opacity: 0.5; }
+  .tc-row-holid td.tc-cell  { opacity: 0.55; }
+  /* Legend */
+  .tc-legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .tc-legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* LOADING */
+  .loading { text-align: center; padding: 48px; color: var(--text3); }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* .zero-icon geriye dönük compat */
+  .cal-day .zero-icon { font-size: 14px; padding: 4px; }
+
+  /* pulse animasyonu (utilization >100%) */
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(56,189,248,0); }
+  }
+  .util-over .value  { color: var(--over) !important; }
+  .util-over { animation: pulse 1.2s infinite; border-color: var(--over) !important; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; padding: 48px; color: var(--text3); }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    max-width: 640px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow);
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; }
+  .modal-close { float: right; cursor: pointer; color: var(--text3); font-size: 20px; line-height: 1; }
+  .modal-close:hover { color: var(--text); }
+
+  /* TOOLTIP */
+  .tip {
+    display: inline-block;
+    width: 16px; height: 16px;
+    background: var(--surface2);
+    border-radius: 50%;
+    text-align: center;
+    line-height: 16px;
+    font-size: 10px;
+    cursor: help;
+    color: var(--text3);
+    border: 1px solid var(--border);
+    margin-left: 4px;
+  }
+
+  /* TOGGLE SWITCH (Kıymetli Aktivite) */
+  .toggle-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-wrap input[type=checkbox] { display: none; }
+  .toggle-track {
+    width: 38px;
+    height: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    position: relative;
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: var(--text3);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle-wrap input:checked + .toggle-track {
+    background: rgba(79,142,247,0.25);
+    border-color: var(--accent);
+  }
+  .toggle-wrap input:checked + .toggle-track::after {
+    transform: translateX(18px);
+    background: var(--accent);
+  }
+  .toggle-label {
+    font-size: 12px;
+    color: var(--text2);
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+  .toggle-wrap:has(input:checked) .toggle-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* PROJE SINIFLANDIRMA */
+  .proj-class-list {
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  .proj-class-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+  .proj-class-row:hover { border-color: var(--accent); }
+  .proj-class-name {
+    font-size: 13px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    margin-right: 12px;
+  }
+  .proj-class-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 6px;
+    margin-right: 10px;
+    white-space: nowrap;
+  }
+  .proj-class-badge.valuable   { background: rgba(34,197,94,0.18); color: var(--green); }
+  .proj-class-badge.worthless  { background: rgba(100,116,139,0.2); color: var(--text3); }
+
+  /* Nav toggle wrapper */
+  .nav-kiymetli {
+    margin-left: 16px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 0.2s;
+  }
+  .nav-kiymetli.active {
+    border-color: var(--accent);
+    background: rgba(79,142,247,0.08);
+  }
+  /* Kıymetli util chip vurgu */
+  .util-kiymetli-note {
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .grid-4, .grid-3 { grid-template-columns: 1fr; }
+    .nav-tabs { overflow-x: auto; }
+    .nav-tab { font-size: 11px; padding: 6px 10px; }
+    .page { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">SAP <span>Aktivite Analizörü</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tab-upload" onclick="showPage('upload', this)">📂 Yükle</button>
+    <button class="nav-tab disabled" onclick="showPage('person', this)" id="tab-person">👤 Kişi Analizi</button>
+    <button class="nav-tab disabled" onclick="showPage('projects', this)" id="tab-projects">📊 Proje İstatistikleri</button>
+    <button class="nav-tab disabled" onclick="showPage('compare', this)" id="tab-compare">🔀 Karşılaştırma</button>
+    <button class="nav-tab disabled" onclick="showPage('heatmap', this)" id="tab-heatmap">🌡️ Heatmap</button>
+    <button class="nav-tab disabled" onclick="showPage('teamcal', this)" id="tab-teamcal">📅 Ekip Takvimi</button>
+  </div>
+  <!-- Global Kıymetli Aktivite toggle — dosya yüklenince görünür -->
+  <div class="nav-kiymetli" id="nav-kiymetli-wrap" style="display:none;">
+    <label class="toggle-wrap" title="Utilization hesabında yalnızca kıymetli projelerin saatlerini kullan">
+      <input type="checkbox" id="kiymetli-toggle" onchange="onKiymetliToggle(this)">
+      <span class="toggle-track"></span>
+      <span class="toggle-label">✦ Kıymetli Aktiviteye Göre</span>
+    </label>
+  </div>
+  <div class="nav-info" id="nav-info">Dosya yüklenmedi</div>
+</nav>
+
+<!-- ============================================================ UPLOAD PAGE -->
+<div class="page active" id="page-upload">
+  <div class="page-title">Rapor Yükle</div>
+
+  <div class="upload-zone" id="upload-zone">
+    <div class="icon">📄</div>
+    <h2>SAP Aktivite Raporu Yükle</h2>
+    <p>SAP'dan export aldığınız .XLS dosyasını sürükleyin veya tıklayın</p>
+    <p style="margin-top:8px;color:var(--text3);font-size:11px;">Desteklenen format: SAP HTML tabanlı XLS export</p>
+  </div>
+  <input type="file" id="file-input" accept=".xls,.xlsx,.html,.htm" style="display:none;">
+
+  <div id="upload-status" style="margin-top:16px;"></div>
+
+  <!-- WORKDAY EDITOR -->
+  <div id="workday-section" style="display:none;" class="mt-24">
+    <hr>
+    <div class="flex items-center gap-8 mb-16" style="margin-top:24px;">
+      <h2 style="font-size:18px;font-weight:700;">İş Günü Düzenleyici</h2>
+      <span class="tip" title="Tatil, izin ve özel günleri ayarlayın. Mavi = iş günü, gri = tatil/haftasonu.">?</span>
+    </div>
+    <div class="card mb-24">
+      <div class="flex items-center gap-12 mb-16" style="flex-wrap:wrap;">
+        <span style="font-size:13px;color:var(--text2);">Ay:</span>
+        <strong id="wd-month-label" style="font-size:15px;"></strong>
+        <span style="font-size:12px;color:var(--text3);margin-left:8px;">İş günü sayısı: <strong id="wd-count" style="color:var(--accent);"></strong></span>
+        <span style="font-size:12px;color:var(--text3);">Toplam saat potansiyel: <strong id="wd-hours" style="color:var(--green);"></strong></span>
+        <button class="btn btn-secondary btn-sm" onclick="resetWorkdays()">Varsayılana Sıfırla</button>
+        <button class="btn btn-primary btn-sm" onclick="applyWorkdays(this)">Uygula & Devam Et ✓</button>
+      </div>
+      <div class="flex gap-8 mb-12" style="flex-wrap:wrap;font-size:11px;">
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:rgba(79,142,247,0.4);border-radius:2px;display:inline-block;border:1px solid var(--accent);"></span> İş günü (tam)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:rgba(234,179,8,0.3);border-radius:2px;display:inline-block;border:1px solid var(--yellow);"></span> Yarım gün</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:rgba(239,68,68,0.15);border-radius:2px;display:inline-block;border:1px solid rgba(239,68,68,0.3);"></span> Haftasonu</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:rgba(100,116,139,0.2);border-radius:2px;display:inline-block;"></span> Tatil / Kapalı</span>
+        <span style="color:var(--text3);">· Tıklayarak döngüsel geçiş yapılır</span>
+      </div>
+      <div id="wd-headers" class="wd-grid" style="margin-bottom:6px;"></div>
+      <div id="wd-grid" class="wd-grid"></div>
+    </div>
+  </div>
+
+  <!-- PROJE SINIFLANDIRMASI -->
+  <div id="projclass-section" style="display:none;">
+    <hr>
+    <div class="flex items-center gap-8 mb-16" style="margin-top:24px;">
+      <h2 style="font-size:18px;font-weight:700;">Proje Sınıflandırması</h2>
+      <span class="tip" title="Utilization hesabında kullanılacak projeleri seçin. Kıymetli işaretlenenler 'Kıymetli Aktiviteye Göre' filtresine dahil edilir.">?</span>
+    </div>
+    <div class="card mb-24">
+      <div class="flex items-center gap-12 mb-16" style="flex-wrap:wrap;">
+        <span style="font-size:13px;color:var(--text2);">
+          Kıymetli: <strong id="pc-valuable-count" style="color:var(--green);">—</strong>
+          &nbsp;·&nbsp;
+          Kıymetsiz: <strong id="pc-worthless-count" style="color:var(--text3);">—</strong>
+          &nbsp;·&nbsp; Toplam: <strong id="pc-total-count" style="color:var(--accent);">—</strong>
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="resetProjectClassifications()">Varsayılana Sıfırla</button>
+        <button class="btn btn-secondary btn-sm" onclick="selectAllProjects(true)">Tümünü Kıymetli Yap</button>
+        <button class="btn btn-secondary btn-sm" onclick="selectAllProjects(false)">Tümünü Kıymetsiz Yap</button>
+        <button class="btn btn-primary btn-sm" onclick="applyProjectClassifications(this)">Uygula & Devam Et ✓</button>
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        "Kıymetli Aktiviteye Göre" filtresi açıkken utilization hesabına yalnızca kıymetli projeler dahil edilir.
+        Vurgulananlar anahtar kelime eşleşmesiyle otomatik kıymetsiz işaretlendi.
+      </p>
+      <div class="proj-class-list" id="proj-class-list"></div>
+    </div>
+  </div>
+
+  <!-- DATA PREVIEW -->
+  <div id="preview-section" style="display:none;">
+    <hr>
+    <div class="page-title" style="margin-top:16px;">Veri Önizleme <span id="preview-count"></span></div>
+    <div class="grid-4 mb-24">
+      <div class="stat-chip"><div class="label">Toplam Kayıt</div><div class="value accent" id="s-total">-</div></div>
+      <div class="stat-chip"><div class="label">Kişi Sayısı</div><div class="value green" id="s-persons">-</div></div>
+      <div class="stat-chip"><div class="label">Proje Sayısı</div><div class="value yellow" id="s-projects">-</div></div>
+      <div class="stat-chip"><div class="label">Tarih Aralığı</div><div class="value" id="s-dates" style="font-size:14px;">-</div></div>
+    </div>
+    <div class="card">
+      <h3>İlk 20 Satır</h3>
+      <div style="overflow-x:auto;">
+        <table class="data-table" id="preview-table">
+          <thead><tr id="preview-head"></tr></thead>
+          <tbody id="preview-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ PERSON PAGE -->
+<div class="page" id="page-person">
+  <div class="flex items-center gap-16 mb-24" style="flex-wrap:wrap;">
+    <div class="page-title" style="margin-bottom:0;">Kişi Analizi</div>
+    <div id="person-chips" class="person-chips flex-wrap" style="flex:1;"></div>
+  </div>
+
+  <div id="person-content">
+    <div class="empty-state"><div class="icon">👤</div><p>Yukarıdan bir kişi seçin</p></div>
+  </div>
+</div>
+
+<!-- ============================================================ PROJECTS PAGE -->
+<div class="page" id="page-projects">
+  <div class="flex items-center justify-between mb-24" style="flex-wrap:wrap;gap:12px;">
+    <div class="page-title" style="margin-bottom:0;">Proje İstatistikleri</div>
+    <div class="flex gap-8">
+      <select id="proj-sort" onchange="renderProjects()">
+        <option value="hours">Saate Göre Sırala</option>
+        <option value="people">Kişi Sayısına Göre</option>
+        <option value="alpha">Alfabetik</option>
+      </select>
+      <select id="proj-filter" onchange="renderProjects()">
+        <option value="all">Tüm Aktiviteler</option>
+        <option value="work">Sadece İş (Tatil Hariç)</option>
+      </select>
+    </div>
+  </div>
+  <div id="projects-content">
+    <div class="empty-state"><div class="icon">📊</div><p>Önce dosya yükleyin</p></div>
+  </div>
+</div>
+
+<!-- ============================================================ COMPARE PAGE -->
+<div class="page" id="page-compare">
+  <div class="page-title">Karşılaştırma & Genel Bakış</div>
+  <div id="compare-content">
+    <div class="empty-state"><div class="icon">🔀</div><p>Önce dosya yükleyin</p></div>
+  </div>
+</div>
+
+<!-- ============================================================ HEATMAP PAGE -->
+<div class="page" id="page-heatmap">
+  <div class="flex items-center justify-between mb-24" style="flex-wrap:wrap;gap:12px;">
+    <div class="page-title" style="margin-bottom:0;">Kişi × Proje Heatmap</div>
+    <div class="flex gap-8">
+      <select id="hm-metric" onchange="renderHeatmap()">
+        <option value="hours">Saat</option>
+        <option value="days">Gün</option>
+        <option value="pct">Yüzde (%)</option>
+      </select>
+    </div>
+  </div>
+  <div id="heatmap-content">
+    <div class="empty-state"><div class="icon">🌡️</div><p>Önce dosya yükleyin</p></div>
+  </div>
+</div>
+
+<!-- ============================================================ TEAM CALENDAR PAGE -->
+<div class="page" id="page-teamcal">
+  <div class="flex items-center justify-between mb-24" style="flex-wrap:wrap;gap:12px;">
+    <div class="page-title" style="margin-bottom:0;">📅 Ekip Takvimi <span id="teamcal-subtitle"></span></div>
+    <div class="flex gap-8 items-center" style="flex-wrap:wrap;">
+      <label style="font-size:12px;color:var(--text2);">Filtre:</label>
+      <select id="tc-filter" onchange="renderTeamCal()">
+        <option value="all">Tüm Günler</option>
+        <option value="workdays">Sadece İş Günleri</option>
+      </select>
+      <label style="font-size:12px;color:var(--text2);">Göster:</label>
+      <select id="tc-mode" onchange="renderTeamCal()">
+        <option value="hours">Toplam Saat</option>
+        <option value="status">Durum Rengi</option>
+      </select>
+    </div>
+  </div>
+  <div id="teamcal-content">
+    <div class="empty-state"><div class="icon">📅</div><p>Önce dosya yükleyin</p></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// STATE
+// ================================================================
+let rawData = [];        // All parsed rows
+let workData = [];       // Non-holiday work rows
+let allData = [];        // All rows including holidays
+let workdays = {};       // { 'YYYY-MM-DD': 1 | 0.5 | 0 }
+let monthLabel = '';
+let monthYear = 0;
+let monthMo = 0;
+let dataMinDate = '';    // Yüklenen verinin ilk günü (YYYY-MM-DD)
+let dataMaxDate = '';    // Yüklenen verinin son günü (YYYY-MM-DD)
+let projectClassifications = {};  // { [projectName]: true=kıymetli, false=kıymetsiz }
+let kiymetliAktiviteToggle = false; // global toggle — ON ise yalnız kıymetli saatler util'e girer
+let selectedPerson = null;
+let chartInstances = {};
+
+// Kıymetsiz default anahtar kelimeler (büyük/küçük harf duyarsız, Türkçe İ/i dahil)
+const KIYMETLSIZ_KEYWORDS = ['ihub', 'izin', '\u0130zin', 'haftasonu', 'ntt data', 'rapor'];
+
+const HOLIDAY_PROJECTS = ['Haftasonu', 'İzin', 'Tatil'];
+const HOLIDAY_SUBTYPE  = 'İzin/Haftasonu/Tatil';
+
+const COLORS = [
+  '#4f8ef7','#7c5cbf','#22c55e','#f97316','#eab308',
+  '#ec4899','#06b6d4','#a78bfa','#f43f5e','#10b981',
+  '#fb923c','#818cf8','#34d399','#fbbf24','#38bdf8',
+  '#c084fc','#4ade80','#facc15','#60a5fa','#f472b6'
+];
+
+// ================================================================
+// NAVIGATION
+// ================================================================
+function showPage(name, callerEl) {
+  // Tab kilitli ise geçiş yapma (proje sınıflandırması onaylanmamış)
+  const tabEl = callerEl || document.getElementById('tab-' + name);
+  if (tabEl && tabEl.classList.contains('disabled')) return;
+
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (tabEl) tabEl.classList.add('active');
+
+  // Lazy render
+  if (allData.length === 0) return;
+  if (name === 'person')   renderPersonChips();
+  if (name === 'projects') renderProjects();
+  if (name === 'compare')  renderCompare();
+  if (name === 'heatmap')  renderHeatmap();
+  if (name === 'teamcal')  renderTeamCal();
+}
+
+// ================================================================
+// FILE LOADING
+// ================================================================
+function processFile(file) {
+  const status = document.getElementById('upload-status');
+  status.innerHTML = '<div class="loading"><div class="spinner"></div><p>Dosya okunuyor...</p></div>';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const content = e.target.result;
+      parseXLS(content, file.name);
+    } catch(err) {
+      status.innerHTML = `<div class="card" style="border-color:var(--red)"><p style="color:var(--red)">❌ Hata: ${err.message}</p></div>`;
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function parseXLS(content, filename) {
+  // SAP XLS is actually HTML MIME multipart
+  const rowReg = /<tr[^>]*>(.*?)<\/tr>/gis;
+  const cellReg = /<td[^>]*>(.*?)<\/td>/gis;
+  const tagReg = /<[^>]+>/g;
+
+  const rows = [];
+  let m;
+  while ((m = rowReg.exec(content)) !== null) {
+    const rowHtml = m[1];
+    const cells = [];
+    let cm;
+    const cellRegLocal = /<td[^>]*>(.*?)<\/td>/gis;
+    while ((cm = cellRegLocal.exec(rowHtml)) !== null) {
+      // Decode HTML entities
+      let val = cm[1].replace(tagReg, '').trim();
+      val = val.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#xA;/g, ' ');
+      cells.push(val);
+    }
+    if (cells.length >= 4) rows.push(cells);
+  }
+
+  if (rows.length < 2) {
+    throw new Error('Geçerli veri bulunamadı. SAP HTML XLS formatı bekleniyor.');
+  }
+
+  const headers = rows[0];
+  const dataRows = rows.slice(1).filter(r => r[0] && r[0].match(/^\d{4}-\d{2}-\d{2}$/));
+
+  if (dataRows.length === 0) {
+    throw new Error('Tarih içeren satır bulunamadı.');
+  }
+
+  // Parse
+  allData = dataRows.map(r => ({
+    date:     r[0] || '',
+    person:   r[1] || '',
+    project:  r[2] || '',
+    hours:    parseFloat((r[3] || '0').replace(',', '.')) || 0,
+    days:     parseFloat((r[4] || '0').replace(',', '.')) || 0,
+    empType:  r[5] || '',
+    location: r[7] || '',
+    subtype:  r[8] || '',
+    devId:    r[9] || '',
+    desc:     r[22] || r[21] || '',
+  })).filter(r => r.person && r.date);
+
+  // Detect month — sadece tek aya ait veri kabul edilir
+  const dates = [...new Set(allData.map(r => r.date))].sort();
+  const firstDate = new Date(dates[0]);
+  const lastDate  = new Date(dates[dates.length - 1]);
+
+  monthYear    = firstDate.getFullYear();
+  monthMo      = firstDate.getMonth(); // 0-based
+  dataMinDate  = dates[0];
+  dataMaxDate  = dates[dates.length - 1];
+
+  const mNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+                  'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  monthLabel = `${mNames[monthMo]} ${monthYear}`;
+
+  // Init workdays (sadece yüklenen aralık aktif, dışarısı 0)
+  initWorkdays();
+
+  // Show sections
+  document.getElementById('workday-section').style.display = 'block';
+  document.getElementById('preview-section').style.display = 'block';
+  document.getElementById('wd-month-label').textContent = monthLabel;
+
+  // Aralık bilgisi — kullanıcıya göster
+  const rangeDays = Math.round((new Date(dataMaxDate) - new Date(dataMinDate)) / 86400000) + 1;
+  document.getElementById('upload-status').innerHTML =
+    `<div class="card" style="border-color:var(--green);padding:12px 20px;">
+      <span style="color:var(--green);">✓</span> <strong>${filename}</strong> başarıyla yüklendi.
+      <span style="color:var(--text2);margin-left:8px;">${allData.length} kayıt</span>
+      <span style="color:var(--text3);margin-left:12px;">·</span>
+      <span style="color:var(--accent);margin-left:12px;">📅 ${fmtDisplay(dataMinDate)} – ${fmtDisplay(dataMaxDate)}</span>
+      <span style="color:var(--text3);margin-left:8px;">(${rangeDays} gün)</span>
+    </div>`;
+
+  renderWorkdayEditor();
+  renderPreview(headers);
+  buildWorkData();
+  updateNavInfo();
+  // Tab'lar henüz kilitli — applyProjectClassifications() sonrası açılır
+  // Takvim düzenleme alanına otomatik kaydır
+  setTimeout(() => {
+    document.getElementById('workday-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
+}
+
+// ================================================================
+// WORKDAY MANAGEMENT
+// ================================================================
+function initWorkdays() {
+  workdays = {};
+  const daysInMonth = new Date(monthYear, monthMo + 1, 0).getDate();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt  = fmtDate(monthYear, monthMo + 1, d);
+    const dow = new Date(dt).getDay(); // 0=Sun, 6=Sat
+
+    // Yüklenen aralık dışındaki günler her zaman 0
+    if (dt < dataMinDate || dt > dataMaxDate) {
+      workdays[dt] = 0;
+      continue;
+    }
+    // Aralık içindeki günler: hafta içi=1, haftasonu=0
+    workdays[dt] = (dow !== 0 && dow !== 6) ? 1 : 0;
+  }
+}
+
+function renderWorkdayEditor() {
+  // Rev 1: Pazartesi bazlı gün sırası
+  const dayNames = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+  const daysInMonth = new Date(monthYear, monthMo + 1, 0).getDate();
+  const dow1st = new Date(monthYear, monthMo, 1).getDay(); // 0=Pazar
+  // Pazartesi offset: Pzt=0 ... Paz=6
+  const firstOffset = (dow1st + 6) % 7;
+
+  // Headers
+  const hdiv = document.getElementById('wd-headers');
+  hdiv.innerHTML = dayNames.map(d => `<div style="text-align:center;font-size:10px;font-weight:600;color:var(--text3);padding:2px;">${d}</div>`).join('');
+
+  // Grid
+  const grid = document.getElementById('wd-grid');
+  let html = '';
+
+  // Boş hücreler
+  for (let i = 0; i < firstOffset; i++) html += `<div></div>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = fmtDate(monthYear, monthMo + 1, d);
+    const dow = new Date(dt).getDay();
+    const isWknd = (dow === 0 || dow === 6);
+    const val = workdays[dt]; // 1, 0.5 veya 0
+    // Pazartesi bazlı gün ismi indeksi
+    const mnIdx = (dow + 6) % 7;
+    let cls;
+    if (val === 1)   cls = 'work';
+    else if (val === 0.5) cls = 'halfday';
+    else cls = isWknd ? 'weekend-def' : 'nonwork';
+
+    // Yüklenen aralık dışındaki günler — tıklanamaz, soluk görünüm
+    const isOutOfRange = dt < dataMinDate || dt > dataMaxDate;
+    if (isOutOfRange) {
+      html += `<div class="wd-cell nonwork" id="wd-${dt}" style="position:relative;opacity:0.25;cursor:not-allowed;" title="Veri aralığı dışında">
+        <span class="wd-num">${d}</span>
+        <span class="wd-day">${dayNames[mnIdx]}</span>
+      </div>`;
+    } else {
+      html += `<div class="wd-cell ${cls}" onclick="toggleWorkday('${dt}', this)" id="wd-${dt}" style="position:relative;">
+        <span class="wd-num">${d}</span>
+        <span class="wd-day">${dayNames[mnIdx]}</span>
+      </div>`;
+    }
+  }
+
+  grid.innerHTML = html;
+  updateWorkdayCounts();
+}
+
+function toggleWorkday(dt, el) {
+  // Aralık dışı günlere dokunma
+  if (dt < dataMinDate || dt > dataMaxDate) return;
+  // Üç durumlu döngü — tam gün(1) → yarım gün(0.5) → tatil(0) → tam gün(1)
+  const cur = workdays[dt];
+  if (cur === 1)        workdays[dt] = 0.5;
+  else if (cur === 0.5) workdays[dt] = 0;
+  else                  workdays[dt] = 1;
+
+  const dow = new Date(dt).getDay();
+  const isWknd = (dow === 0 || dow === 6);
+  const val = workdays[dt];
+  let cls;
+  if (val === 1)        cls = 'work';
+  else if (val === 0.5) cls = 'halfday';
+  else                  cls = isWknd ? 'weekend-def' : 'nonwork';
+  el.className = 'wd-cell ' + cls;
+  el.style.position = 'relative';
+  updateWorkdayCounts();
+}
+
+function updateWorkdayCounts() {
+  // Rev 2: tam=1, yarım=0.5, tatil=0 — count = tam+yarım gün sayısı, saat = Σ(val*8)
+  const vals = Object.values(workdays);
+  const count = vals.filter(v => v > 0).length;
+  const totalH = vals.reduce((s, v) => s + v * 8, 0);
+  document.getElementById('wd-count').textContent = count;
+  document.getElementById('wd-hours').textContent = totalH.toFixed(0) + ' saat';
+}
+
+function resetWorkdays() {
+  initWorkdays();
+  renderWorkdayEditor();
+}
+
+function applyWorkdays(btn) {
+  buildWorkData();
+  updateNavInfo();
+  // Proje sınıflandırma section'ını göster ve doldur
+  renderProjectClassifications();
+  document.getElementById('projclass-section').style.display = 'block';
+  // Flash success + proje sınıflandırmasına otomatik kaydır
+  if (btn) {
+    btn.textContent = '✓ Uygulandı!';
+    btn.style.background = 'var(--green)';
+    setTimeout(() => { btn.textContent = 'Uygula & Devam Et ✓'; btn.style.background = ''; }, 1500);
+  }
+  setTimeout(() => {
+    document.getElementById('projclass-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
+}
+
+// ================================================================
+// PROJECT CLASSIFICATIONS
+// ================================================================
+
+/** Projenin kıymetsiz anahtar kelime içerip içermediğini kontrol et.
+ *  Türkçe İ/i karakteri toLowerCase() ile farklı davrandığından
+ *  hem orijinal hem küçük harf üzerinde kontrol yapılır. */
+function isDefaultWorthless(projectName) {
+  const lower = projectName.toLowerCase();
+  const orig  = projectName;
+  return KIYMETLSIZ_KEYWORDS.some(kw => {
+    const kwLower = kw.toLowerCase();
+    return lower.includes(kwLower) || orig.toLowerCase().includes(kw) || orig.includes(kw);
+  });
+}
+
+/** workData'daki tüm benzersiz projeleri al, default classification uygula */
+function initProjectClassifications() {
+  const projects = [...new Set(workData.map(r => r.project).filter(Boolean))].sort();
+  projectClassifications = {};
+  projects.forEach(p => {
+    projectClassifications[p] = !isDefaultWorthless(p); // true=kıymetli
+  });
+}
+
+/** Proje listesini section'a render et */
+function renderProjectClassifications() {
+  initProjectClassifications();
+  const list = document.getElementById('proj-class-list');
+  const projects = Object.keys(projectClassifications).sort();
+
+  list.innerHTML = projects.map(proj => {
+    const isVal = projectClassifications[proj];
+    const autoFlagged = isDefaultWorthless(proj);
+    return `
+      <div class="proj-class-row" id="pcr-${escAttr(proj)}">
+        <span class="proj-class-name" title="${escHtml(proj)}">${escHtml(proj)}</span>
+        ${autoFlagged ? '<span style="font-size:10px;color:var(--text3);margin-right:8px;">🔖 auto</span>' : ''}
+        <span class="proj-class-badge ${isVal ? 'valuable' : 'worthless'}" id="pcb-${escAttr(proj)}">
+          ${isVal ? 'Kıymetli' : 'Kıymetsiz'}
+        </span>
+        <label class="toggle-wrap" style="gap:0;margin-left:4px;">
+          <input type="checkbox" ${isVal ? 'checked' : ''} onchange="toggleProjectClass('${escAttr(proj)}', this)">
+          <span class="toggle-track"></span>
+        </label>
+      </div>`;
+  }).join('');
+
+  updateProjectClassCounts();
+}
+
+/** Tek proje toggle edildi */
+function toggleProjectClass(proj, checkbox) {
+  // escAttr ile kaçırılmış ismi geri al
+  const realProj = Object.keys(projectClassifications).find(p => escAttr(p) === proj);
+  if (!realProj) return;
+  projectClassifications[realProj] = checkbox.checked;
+
+  const badge = document.getElementById('pcb-' + proj);
+  if (badge) {
+    badge.textContent   = checkbox.checked ? 'Kıymetli' : 'Kıymetsiz';
+    badge.className     = 'proj-class-badge ' + (checkbox.checked ? 'valuable' : 'worthless');
+  }
+  updateProjectClassCounts();
+}
+
+/** Sayaçları güncelle */
+function updateProjectClassCounts() {
+  const vals = Object.values(projectClassifications);
+  const val  = vals.filter(Boolean).length;
+  const inv  = vals.length - val;
+  document.getElementById('pc-valuable-count').textContent  = val;
+  document.getElementById('pc-worthless-count').textContent = inv;
+  document.getElementById('pc-total-count').textContent     = vals.length;
+}
+
+/** Tümünü kıymetli/kıymetsiz yap */
+function selectAllProjects(isValuable) {
+  Object.keys(projectClassifications).forEach(p => {
+    projectClassifications[p] = isValuable;
+  });
+  renderProjectClassifications(); // listyi yenile
+}
+
+/** Varsayılana sıfırla */
+function resetProjectClassifications() {
+  renderProjectClassifications();
+}
+
+/** Uygula butonuna basıldı */
+function applyProjectClassifications(btn) {
+  // Preview section'ı göster
+  document.getElementById('preview-section').style.display = 'block';
+  // Tab'ları kilidi aç — ilk kez veya yeniden onaylama
+  enableTabs();
+  // Aktif sayfayı yeniden render et (tab açıksa)
+  refreshCurrentAnalysisPage();
+  if (btn) {
+    btn.textContent = '✓ Uygulandı!';
+    btn.style.background = 'var(--green)';
+    setTimeout(() => { btn.textContent = 'Uygula & Devam Et ✓'; btn.style.background = ''; }, 1500);
+  }
+}
+
+/** Global toggle değişti */
+function onKiymetliToggle(checkbox) {
+  kiymetliAktiviteToggle = checkbox.checked;
+  // Nav wrapper görselini güncelle
+  const wrap = document.getElementById('nav-kiymetli-wrap');
+  if (wrap) wrap.classList.toggle('active', kiymetliAktiviteToggle);
+  // Aktif analiz sayfasını yeniden render et
+  refreshCurrentAnalysisPage();
+}
+
+/** Aktif tab'ı yeniden render et (heatmap toggle'dan etkilenmez) */
+function refreshCurrentAnalysisPage() {
+  const activePage = document.querySelector('.page.active');
+  if (!activePage) return;
+  const id = activePage.id;
+  if (id === 'page-person'   && selectedPerson) renderPersonDetail(selectedPerson);
+  if (id === 'page-compare')  renderCompare();
+  if (id === 'page-projects') renderProjects();
+  if (id === 'page-teamcal')  renderTeamCal();
+  // page-heatmap: toggle'dan etkilenmez, yeniden render gerekmez
+}
+
+/** Proje adını HTML attribute'a güvenli çevir (özel karakterler için) */
+function escAttr(str) {
+  return (str || '').replace(/[^a-zA-Z0-9_-]/g, c => '_' + c.charCodeAt(0) + '_');
+}
+
+function buildWorkData() {
+  // Exclude holiday rows (rows where subtype = İzin/Haftasonu/Tatil OR project in holiday list)
+  workData = allData.filter(r => {
+    if (r.subtype === HOLIDAY_SUBTYPE) return false;
+    if (HOLIDAY_PROJECTS.includes(r.project)) return false;
+    return true;
+  });
+}
+
+// ================================================================
+// PREVIEW
+// ================================================================
+function fmtDisplay(isoDate) {
+  // Rev 10: dd.MM.yyyy formatı
+  const [y, m, d] = isoDate.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+function renderPreview(headers) {
+  const persons  = [...new Set(allData.map(r => r.person).filter(Boolean))];
+  const projects = [...new Set(allData.map(r => r.project).filter(p => p && !HOLIDAY_PROJECTS.includes(p)))];
+  const dates    = allData.map(r => r.date).sort();
+
+  // Temel 4 chip
+  document.getElementById('s-total').textContent    = allData.length;
+  document.getElementById('s-persons').textContent  = persons.length;
+  document.getElementById('s-projects').textContent = projects.length;
+  // Rev 10: dd.MM.yyyy
+  document.getElementById('s-dates').textContent =
+    `${fmtDisplay(dates[0])} – ${fmtDisplay(dates[dates.length-1])}`;
+
+  // Rev 3: Ek metrikler
+  // Toplam çalışma saati (workData henüz yoksa allData kullan)
+  const src = workData.length ? workData : allData;
+  const totalWorkH = src.reduce((s, r) => s + r.hours, 0);
+
+  // Ortalama günlük saat (ekip geneli)
+  const wdCount  = Object.values(workdays).filter(v => v > 0).length || 1;
+  const avgDaily = persons.length > 0 ? (totalWorkH / (persons.length * wdCount)) : 0;
+
+  // En aktif kişi
+  const personHMap = {};
+  src.forEach(r => { personHMap[r.person] = (personHMap[r.person] || 0) + r.hours; });
+  const topPerson = Object.entries(personHMap).sort((a, b) => b[1] - a[1])[0];
+
+  // En büyük proje
+  const projHMap = {};
+  src.forEach(r => {
+    if (r.project && !HOLIDAY_PROJECTS.includes(r.project))
+      projHMap[r.project] = (projHMap[r.project] || 0) + r.hours;
+  });
+  const topProject = Object.entries(projHMap).sort((a, b) => b[1] - a[1])[0];
+
+  // Tatil/İzin kaydı sayısı
+  const holidayCount = allData.filter(r => r.subtype === HOLIDAY_SUBTYPE).length;
+
+  // Ek chip'leri preview-section altına ekle (ilk kez ekliyorsa)
+  const extraId = 'preview-extra-chips';
+  let extraEl = document.getElementById(extraId);
+  if (!extraEl) {
+    extraEl = document.createElement('div');
+    extraEl.id = extraId;
+    extraEl.className = 'grid-4 mb-24';
+    // grid-4'ü grid-3 yerine flex-wrap yapıyoruz ki 5 chip sığsın
+    extraEl.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;';
+    document.getElementById('preview-section').insertBefore(
+      extraEl, document.querySelector('#preview-section .card')
+    );
+  }
+
+  extraEl.innerHTML = `
+    <div class="stat-chip">
+      <div class="label">Toplam Çalışma Saati</div>
+      <div class="value accent">${totalWorkH.toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text2);"> saat</span></div>
+    </div>
+    <div class="stat-chip">
+      <div class="label">Ort. Günlük Saat (Ekip)</div>
+      <div class="value green">${avgDaily.toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text2);"> saat/gün</span></div>
+    </div>
+    <div class="stat-chip">
+      <div class="label">En Aktif Kişi</div>
+      <div class="value yellow" style="font-size:15px;">${topPerson ? escHtml(topPerson[0].substring(0,22)) : '-'}</div>
+      <div class="sub">${topPerson ? topPerson[1].toFixed(1) + ' saat' : ''}</div>
+    </div>
+    <div class="stat-chip">
+      <div class="label">En Büyük Proje</div>
+      <div class="value orange" style="font-size:14px;">${topProject ? escHtml(topProject[0].substring(0,22)) : '-'}</div>
+      <div class="sub">${topProject ? topProject[1].toFixed(1) + ' saat' : ''}</div>
+    </div>
+    <div class="stat-chip">
+      <div class="label">Tatil/İzin Kaydı</div>
+      <div class="value red">${holidayCount}</div>
+      <div class="sub">kayıt</div>
+    </div>
+  `;
+
+  // Rev 3: "İlk 20 Satır" tablosu kaldırıldı — önizleme card'ı gizle
+  const previewCard = document.querySelector('#preview-section .card');
+  if (previewCard) previewCard.style.display = 'none';
+}
+
+// ================================================================
+// NAV INFO
+// ================================================================
+function updateNavInfo() {
+  if (!allData.length) return;
+  const persons = [...new Set(allData.map(r => r.person).filter(Boolean))];
+  const wdCount  = Object.values(workdays).filter(v => v > 0).length;
+  const totalH   = Object.values(workdays).reduce((s, v) => s + v * 8, 0);
+  document.getElementById('nav-info').textContent =
+    `${monthLabel} | ${persons.length} kişi | ${wdCount} iş günü | ${totalH.toFixed(0)}h potansiyel`;
+}
+
+function enableTabs() {
+  ['tab-person','tab-projects','tab-compare','tab-heatmap','tab-teamcal'].forEach(id => {
+    document.getElementById(id).classList.remove('disabled');
+  });
+  // Nav kıymetli toggle'ı göster
+  document.getElementById('nav-kiymetli-wrap').style.display = 'flex';
+}
+
+// ================================================================
+// PERSON ANALYSIS
+// ================================================================
+function renderPersonChips() {
+  if (!allData.length) return;
+  const persons = [...new Set(allData.map(r => r.person).filter(Boolean))].sort();
+  const chips = document.getElementById('person-chips');
+  chips.innerHTML = persons.map(p =>
+    `<div class="person-chip ${p === selectedPerson ? 'active' : ''}" onclick="selectPerson('${escHtml(p)}')">${escHtml(p)}</div>`
+  ).join('');
+}
+
+function selectPerson(name) {
+  selectedPerson = name;
+  renderPersonChips();
+  renderPersonDetail(name);
+}
+
+function renderPersonDetail(name) {
+  const container = document.getElementById('person-content');
+
+  const personWork = workData.filter(r => r.person === name);
+  const personAll  = allData.filter(r => r.person === name);
+
+  if (personWork.length === 0 && personAll.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>Bu kişi için veri bulunamadı</p></div>';
+    return;
+  }
+
+  // Total hours (her zaman gerçek toplam)
+  const totalHours = personWork.reduce((s, r) => s + r.hours, 0);
+
+  // Kıymetli saatler — toggle ON ise sadece kıymetli projeler
+  const kiymetliHours = personWork
+    .filter(r => projectClassifications[r.project] !== false) // false=kıymetsiz, undefined/true=kıymetli
+    .reduce((s, r) => s + r.hours, 0);
+  const utilBaseHours = kiymetliAktiviteToggle ? kiymetliHours : totalHours;
+
+  const potentialHours = Object.values(workdays).reduce((s, v) => s + v * 8, 0);
+  const workdayCount   = Object.values(workdays).filter(v => v > 0).length;
+  const utilPct = potentialHours > 0 ? (utilBaseHours / potentialHours * 100) : 0;
+
+  // Project breakdown
+  const projMap = {};
+  personWork.forEach(r => {
+    if (!projMap[r.project]) projMap[r.project] = 0;
+    projMap[r.project] += r.hours;
+  });
+  const projArr = Object.entries(projMap).sort((a, b) => b[1] - a[1]);
+
+  // Daily hours map
+  const dailyMap = {};
+  personWork.forEach(r => {
+    dailyMap[r.date] = (dailyMap[r.date] || 0) + r.hours;
+  });
+
+  // Subtype breakdown
+  const subMap = {};
+  personWork.forEach(r => {
+    const s = r.subtype || 'Diğer';
+    subMap[s] = (subMap[s] || 0) + r.hours;
+  });
+
+  // >100 için sky-blue (over), aksi yeşil/sarı/kırmızı
+  const utilColor  = utilPct > 100 ? 'var(--over)'
+                   : utilPct >= 85 ? 'var(--green)'
+                   : utilPct >= 60 ? 'var(--yellow)'
+                   : 'var(--red)';
+  const utilOver100  = utilPct > 100;
+  const utilSubLabel = kiymetliAktiviteToggle
+    ? `${kiymetliHours.toFixed(1)}h kıymetli / ${potentialHours.toFixed(0)}h`
+    : `${totalHours.toFixed(1)} / ${potentialHours.toFixed(0)} saat`;
+
+  container.innerHTML = `
+    <!-- TOP STATS -->
+    <div class="grid-4 mb-24">
+      <div class="stat-chip">
+        <div class="label">Toplam Çalışma Saati</div>
+        <div class="value accent">${totalHours.toFixed(1)}<span style="font-size:14px;font-weight:400;color:var(--text2);"> saat</span></div>
+        <div class="sub">${workdayCount} iş günü potansiyeli</div>
+      </div>
+      <div class="stat-chip ${utilOver100 ? 'util-over' : ''}">
+        <div class="label">Utilization${kiymetliAktiviteToggle ? ' <span style="color:var(--accent);font-size:10px;">✦ Kıymetli</span>' : ''}</div>
+        <div class="value" style="color:${utilColor}">${utilPct.toFixed(1)}<span style="font-size:14px;font-weight:400;color:var(--text2);">%</span>
+          ${utilOver100 ? '<span style="font-size:12px;color:var(--over);margin-left:4px;">⚡ Mesai</span>' : ''}
+        </div>
+        <div class="sub">${utilSubLabel}</div>
+      </div>
+      <div class="stat-chip">
+        <div class="label">Girilen Proje Sayısı</div>
+        <div class="value yellow">${projArr.length}</div>
+      </div>
+      <div class="stat-chip">
+        <div class="label">Günlük Ortalama</div>
+        <div class="value green">${workdayCount > 0 ? (totalHours/workdayCount).toFixed(1) : '0'}<span style="font-size:14px;font-weight:400;color:var(--text2);"> saat/gün</span></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW -->
+    <div class="grid-2 mb-24">
+      <div class="card">
+        <h3>Proje Dağılımı</h3>
+        <div class="chart-box" style="display:flex;justify-content:center;align-items:center;max-height:280px;">
+          <canvas id="chart-proj-pie" style="max-width:100%;"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Proje Saatleri (Sıralı)</h3>
+        <div id="proj-bars"></div>
+      </div>
+    </div>
+
+    <!-- CALENDAR -->
+    <div class="card mb-24">
+      <h3>Aylık Takvim — Günlük Saat Girişi</h3>
+      <div id="person-calendar"></div>
+    </div>
+
+    <!-- SUBTYPE + UTIL -->
+    <div class="grid-2 mb-24">
+      <div class="card">
+        <h3>Aktivite Tipi Dağılımı</h3>
+        <div class="chart-box" style="display:flex;justify-content:center;align-items:center;max-height:250px;">
+          <canvas id="chart-subtype" style="max-width:100%;"></canvas>
+        </div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;justify-content:center;">
+        <div class="util-gauge" style="--pct:${Math.min(100,utilPct).toFixed(1)}%">
+          ${utilOver100
+            ? `<div class="util-ring" style="background: conic-gradient(${utilColor} 100%, var(--surface2) 100%);">
+                 <div class="util-ring-val" style="color:${utilColor}">${utilPct.toFixed(0)}%</div>
+               </div>`
+            : `<div class="util-ring" style="background: conic-gradient(${utilColor} ${utilPct.toFixed(1)}%, var(--surface2) ${utilPct.toFixed(1)}%);">
+                 <div class="util-ring-val" style="color:${utilColor}">${utilPct.toFixed(0)}%</div>
+               </div>`
+          }
+          <div class="util-label">Utilization Oranı${utilOver100 ? ' ⚡' : ''}${kiymetliAktiviteToggle ? ' <span style="color:var(--accent);font-size:10px;">✦ Kıymetli</span>' : ''}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px;">${utilSubLabel}</div>
+          <div style="margin-top:12px;width:100%;max-width:200px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px;">
+              <span>0%</span><span>50%</span><span>${utilOver100 ? utilPct.toFixed(0)+'%' : '100%'}</span>
+            </div>
+            <div style="height:10px;background:var(--surface2);border-radius:5px;overflow:hidden;">
+              <div style="height:100%;width:${Math.min(100,utilPct).toFixed(1)}%;background:${utilColor};border-radius:5px;transition:width 0.5s;">
+                ${utilOver100 ? `<div style="position:absolute;right:0;top:0;height:100%;width:8px;background:var(--over);border-radius:0 5px 5px 0;"></div>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROJECT TABLE -->
+    <div class="card">
+      <h3>Proje Detay Tablosu${kiymetliAktiviteToggle ? ' <span style="font-size:12px;font-weight:400;color:var(--text3);">— kıymetsiz projeler soluk gösterilir</span>' : ''}</h3>
+      <table class="data-table">
+        <thead><tr>
+          <th>#</th><th>Proje</th><th>Saat</th><th>Yüzde</th><th>Gün</th>
+        </tr></thead>
+        <tbody>
+          ${projArr.map(([proj, hrs], i) => {
+            const pct = totalHours > 0 ? (hrs/totalHours*100) : 0;
+            const isWorthless = kiymetliAktiviteToggle && projectClassifications[proj] === false;
+            const color = isWorthless ? '#64748b' : COLORS[i % COLORS.length];
+            const rowStyle = isWorthless ? 'opacity:0.5;' : '';
+            const nameSuffix = isWorthless ? ' <span style="font-size:10px;color:var(--text3);">kıymetsiz</span>' : '';
+            return `<tr style="${rowStyle}">
+              <td class="rank">#${i+1}</td>
+              <td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:8px;"></span>${escHtml(proj)}${nameSuffix}</td>
+              <td><strong>${hrs.toFixed(1)}</strong></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="width:60px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+                    <div style="width:${pct.toFixed(1)}%;height:100%;background:${color};border-radius:3px;"></div>
+                  </div>
+                  <span style="font-size:12px;color:var(--text2);">${pct.toFixed(1)}%</span>
+                </div>
+              </td>
+              <td style="color:var(--text2);">${(hrs/8).toFixed(2)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Render charts
+  requestAnimationFrame(() => {
+    // Pie chart
+    renderDoughnut('chart-proj-pie', 
+      projArr.map(([p]) => p.length > 25 ? p.substring(0,25)+'…' : p),
+      projArr.map(([,h]) => h),
+      projArr.map((_, i) => COLORS[i % COLORS.length])
+    );
+
+    // Subtype chart
+    const subArr = Object.entries(subMap).sort((a,b) => b[1]-a[1]);
+    renderDoughnut('chart-subtype',
+      subArr.map(([s]) => s || 'Diğer'),
+      subArr.map(([,h]) => h),
+      subArr.map((_,i) => COLORS[(i+8) % COLORS.length])
+    );
+
+    // Bar chart for projects
+    const barsEl = document.getElementById('proj-bars');
+    const maxH = projArr[0]?.[1] || 1;
+    barsEl.innerHTML = projArr.slice(0, 10).map(([p, h], i) => {
+      const pct = (h / maxH * 100).toFixed(1);
+      const totalPct = totalHours > 0 ? (h/totalHours*100) : 0;
+      return `<div class="prog-bar-wrap">
+        <div class="prog-label">
+          <span class="name" title="${escHtml(p)}">${escHtml(p.length > 30 ? p.substring(0,30)+'…' : p)}</span>
+          <span class="val">${h.toFixed(1)}h <span style="color:var(--text3);font-size:11px;">(${totalPct.toFixed(0)}%)</span></span>
+        </div>
+        <div class="prog-bar">
+          <div class="prog-fill" style="width:${pct}%;background:${COLORS[i % COLORS.length]};"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Kıymetli-only günlük saat haritası (toggle için)
+    const kiymetliDailyMap = {};
+    personWork.filter(r => projectClassifications[r.project] !== false).forEach(r => {
+      kiymetliDailyMap[r.date] = (kiymetliDailyMap[r.date] || 0) + r.hours;
+    });
+
+    // Calendar — kişi adı + kıymetli harita
+    renderPersonCalendar('person-calendar', dailyMap, name, kiymetliDailyMap);
+  });
+}
+
+function renderPersonCalendar(containerId, dailyMap, personName, kiymetliDailyMap = {}) {
+  const el = document.getElementById(containerId);
+  const daysInMonth = new Date(monthYear, monthMo + 1, 0).getDate();
+
+  // Pazartesi bazlı
+  const dayNames    = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+  const dow1st      = new Date(monthYear, monthMo, 1).getDay();
+  const firstOffset = (dow1st + 6) % 7;
+
+  // Kişi için proje renk haritası — tutarlı renk ataması
+  const personRows = workData.filter(r => r.person === personName);
+  const allProjects = [...new Set(personRows.map(r => r.project).filter(Boolean))];
+  const projColorMap = {};
+  allProjects.forEach((p, i) => { projColorMap[p] = COLORS[i % COLORS.length]; });
+
+  let html = '<div class="calendar-grid">';
+
+  // Başlıklar
+  html += dayNames.map(d => `<div class="cal-header">${d}</div>`).join('');
+
+  // Boş hücreler
+  for (let i = 0; i < firstOffset; i++) html += '<div class="cal-day empty"></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt     = fmtDate(monthYear, monthMo + 1, d);
+    const dow    = new Date(dt).getDay();
+    const isWknd = (dow === 0 || dow === 6);
+    const wdVal  = workdays[dt];
+    const isWork = wdVal > 0;
+    const totalHours  = dailyMap[dt] || 0;           // gerçek toplam
+    const kHours      = kiymetliDailyMap[dt] || 0;   // kıymetli-only
+    // Renk ve eşik için kullanılacak baz saat
+    const hours = kiymetliAktiviteToggle ? kHours : totalHours;
+
+    // Günlük proje dağılımı
+    const dayRows = workData.filter(r => r.date === dt && r.person === personName);
+    const dayProjMap = {};
+    dayRows.forEach(r => {
+      if (r.project) dayProjMap[r.project] = (dayProjMap[r.project] || 0) + r.hours;
+    });
+    const projEntries = Object.entries(dayProjMap).sort((a, b) => b[1] - a[1]);
+    const totalProjH  = projEntries.reduce((s, [, h]) => s + h, 0);
+
+    // Beklenen saat: tam gün=8, yarım gün=4, tatil=0
+    const expectedH = wdVal * 8;
+
+    // Hücre tipi & görsel sınıf
+    let baseCls, hourCls = '', badgeHtml = '', hourColor = 'var(--text2)';
+
+    // ½ gün notu — yarım gün olduğunu her durumda badge'de göster
+    const halfTag = wdVal === 0.5 ? ' ½' : '';
+
+    if (!isWork && totalHours > 0) {
+      // Tatil/haftasonu (wdVal===0) olarak işaretlenmiş ama veri var → greyed out
+      baseCls   = 'offday-hours';
+      hourColor = 'var(--text3)';
+      const offLabel = isWknd ? 'Haftasonu' : 'Tatil';
+      badgeHtml = `<span class="day-badge badge-offday">${totalHours.toFixed(1)}h · ${offLabel}</span>`;
+    } else if (!isWork) {
+      // Tatil/haftasonu, saat yok → normal tatil görünümü
+      baseCls = isWknd ? 'weekend' : 'holiday';
+    } else if (totalHours === 0) {
+      // İş günü (tam veya yarım) ama hiç giriş yok
+      baseCls   = 'work-day zero-hours-work';
+      badgeHtml = `<span class="day-badge badge-zero">❗ Giriş Yok${halfTag}</span>`;
+    } else if (kiymetliAktiviteToggle && kHours === 0) {
+      // Toggle ON: iş günü, toplam saat var ama kıymetli saat yok — tamamen kıymetsiz gün
+      baseCls   = 'work-day has-hours under-hours';
+      hourColor = 'var(--red)';
+      badgeHtml = `<span class="day-badge badge-under">✗ ${totalHours.toFixed(1)}h kıymetsiz${halfTag}</span>`;
+    } else if (hours > expectedH) {
+      // Beklentinin üzeri — yarım günde 4h+ girilmiş dahil
+      baseCls   = 'work-day has-hours over-hours';
+      hourColor = 'var(--over)';
+      const dispLabel = kiymetliAktiviteToggle
+        ? `⚡ ${kHours.toFixed(1)}h ✦${halfTag}`
+        : `⚡ ${hours.toFixed(1)}h${halfTag}`;
+      badgeHtml = `<span class="day-badge badge-over">${dispLabel}</span>`;
+    } else if (hours >= expectedH) {
+      // Tam (yarım günde tam = 4h)
+      baseCls   = 'work-day has-hours full-hours';
+      hourColor = 'var(--green)';
+      const dispLabel = kiymetliAktiviteToggle
+        ? `✓ ${kHours.toFixed(1)}h ✦${halfTag}`
+        : `✓ ${hours.toFixed(1)}h${halfTag}`;
+      badgeHtml = `<span class="day-badge badge-full">${dispLabel}</span>`;
+    } else {
+      // İş günü, beklentinin altı (yarım günde 4h altı dahil)
+      baseCls   = 'work-day has-hours under-hours';
+      hourColor = 'var(--red)';
+      const dispLabel = kiymetliAktiviteToggle
+        ? `${kHours.toFixed(1)}h ✦${halfTag}`
+        : `${hours.toFixed(1)}h${halfTag}`;
+      badgeHtml = `<span class="day-badge badge-under">${dispLabel}</span>`;
+    }
+
+    // Proje listesi (hücre içi — maks 3 satır)
+    // Toggle ON iken kıymetsiz projeler soluk ve gri gösterilir
+    let projListHtml = '';
+    if (projEntries.length > 0) {
+      const show = projEntries.slice(0, 3);
+      const more = projEntries.length - show.length;
+      projListHtml = `<div class="proj-list">` +
+        show.map(([p, h]) => {
+          const isWorthless = kiymetliAktiviteToggle && projectClassifications[p] === false;
+          const col   = isWorthless ? '#64748b' : (projColorMap[p] || '#94a3b8');
+          const label = p.length > 14 ? p.substring(0, 14) + '…' : p;
+          return `<div class="proj-item" style="${isWorthless ? 'opacity:0.45;' : ''}">
+            <span class="proj-dot" style="background:${col};"></span>
+            <span class="proj-name" style="${isWorthless ? 'color:var(--text3);' : ''}">${escHtml(label)}</span>
+            <span class="proj-h" style="${isWorthless ? 'color:var(--text3);' : ''}">${h % 1 === 0 ? h : h.toFixed(1)}h</span>
+          </div>`;
+        }).join('') +
+        (more > 0 ? `<div class="proj-more">+${more} proje daha</div>` : '') +
+        `</div>`;
+    } else if (isWork && hours === 0) {
+      projListHtml = `<div class="proj-list" style="align-items:center;justify-content:center;flex:1;">
+        <span style="font-size:18px;opacity:0.4;">—</span>
+      </div>`;
+    } else if (!isWork && hours > 0) {
+      // Tatil/haftasonu ama saat girilmiş → soluk proje listesi göster
+      const show = projEntries.slice(0, 3);
+      const more = projEntries.length - show.length;
+      projListHtml = `<div class="proj-list" style="opacity:0.55;">` +
+        show.map(([p, h]) => {
+          const col   = projColorMap[p] || '#94a3b8';
+          const label = p.length > 14 ? p.substring(0, 14) + '…' : p;
+          return `<div class="proj-item">
+            <span class="proj-dot" style="background:${col};"></span>
+            <span class="proj-name">${escHtml(label)}</span>
+            <span class="proj-h">${h % 1 === 0 ? h : h.toFixed(1)}h</span>
+          </div>`;
+        }).join('') +
+        (more > 0 ? `<div class="proj-more">+${more} daha</div>` : '') +
+        `</div>`;
+    } else if (!isWork) {
+      // Tatil, saat yok
+      projListHtml = `<div class="proj-list" style="align-items:center;justify-content:center;flex:1;">
+        <span style="font-size:11px;color:var(--text3);">${isWknd ? 'Haftasonu' : 'Tatil'}</span>
+      </div>`;
+    }
+
+    // Alt renk şeridi — toggle ON ise kıymetsiz projeler gri
+    let segHtml = '';
+    if (projEntries.length > 0 && totalProjH > 0) {
+      segHtml = `<div class="proj-segments">` +
+        projEntries.map(([p, h]) => {
+          const isWorthless = kiymetliAktiviteToggle && projectClassifications[p] === false;
+          const col = isWorthless ? 'rgba(100,116,139,0.3)' : (projColorMap[p] || '#94a3b8');
+          const w   = (h / totalProjH * 100).toFixed(1);
+          return `<div style="width:${w}%;background:${col};${isWorthless ? 'opacity:0.5;' : ''}"></div>`;
+        }).join('') +
+        `</div>`;
+    }
+
+    // Tooltip — detaylı proje listesi
+    // Yarım gün notu — tooltip başlığında da göster
+    const halfDayNote = wdVal === 0.5
+      ? `<span style="font-size:10px;color:var(--yellow);margin-left:6px;font-weight:500;">½ Gün (beklenti: ${expectedH}h)</span>`
+      : '';
+    const ttDate = `<div style="font-weight:700;color:var(--text);margin-bottom:4px;">${dt}${halfDayNote}</div>`;
+    let ttBody;
+    if (!isWork && hours === 0) {
+      // Tatil/haftasonu (wdVal===0), saat girilmemiş
+      ttBody = `<div style="color:var(--text3);">${isWknd ? 'Haftasonu' : 'Tatil'}</div>`;
+    } else if (!isWork && hours > 0) {
+      // Tatil/haftasonu ama saat girilmiş — uyarı + proje listesi
+      const offNote = isWknd ? 'Haftasonu' : 'Tatil';
+      const offRows = projEntries.map(([p, h]) => {
+        const col = projColorMap[p] || '#94a3b8';
+        return `<div class="tt-row">
+          <span class="tt-dot" style="background:${col};opacity:0.6;"></span>
+          <span style="flex:1;color:var(--text3);">${escHtml(p.length > 22 ? p.substring(0,22)+'…' : p)}</span>
+          <span style="color:var(--text3);margin-left:8px;">${h.toFixed(1)}h</span>
+        </div>`;
+      }).join('');
+      ttBody = `<div style="color:var(--text3);margin-bottom:4px;font-size:10px;border-bottom:1px solid var(--border);padding-bottom:4px;">📌 ${offNote} — takvimde kapalı gün</div>${offRows}`;
+    } else if (projEntries.length === 0) {
+      ttBody = `<div style="color:var(--red);">Saat girişi yok${wdVal === 0.5 ? ' (½ gün)' : ''}</div>`;
+    } else {
+      const ttSep = `<div class="tt-sep"></div>`;
+      const ttRows = projEntries.map(([p, h]) => {
+        const isWorthless = kiymetliAktiviteToggle && projectClassifications[p] === false;
+        const col  = isWorthless ? '#64748b' : (projColorMap[p] || '#94a3b8');
+        const pct  = totalProjH > 0 ? (h / totalProjH * 100).toFixed(0) : 0;
+        const nameStyle = isWorthless ? 'flex:1;color:var(--text3);text-decoration:line-through;' : 'flex:1;color:var(--text2);';
+        const valStyle  = isWorthless ? 'font-weight:700;color:var(--text3);margin-left:8px;' : 'font-weight:700;color:var(--text);margin-left:8px;';
+        return `<div class="tt-row" style="${isWorthless ? 'opacity:0.65;' : ''}">
+          <span class="tt-dot" style="background:${col};"></span>
+          <span style="${nameStyle}">${escHtml(p.length > 22 ? p.substring(0,22)+'…' : p)}</span>
+          <span style="${valStyle}">${h.toFixed(1)}h</span>
+          <span style="color:var(--text3);font-size:10px;margin-left:4px;">${pct}%</span>
+        </div>`;
+      }).join('');
+      // Toggle ON: toplam satırında kıymetli / toplam farkını göster
+      let ttTotalContent;
+      if (kiymetliAktiviteToggle && kHours < totalHours) {
+        ttTotalContent = `<span style="font-weight:800;color:${hourColor};">${kHours.toFixed(1)}h <span style="font-size:10px;color:var(--accent);">✦ kıymetli</span></span>
+          <span style="font-size:10px;color:var(--text3);margin-left:6px;">/ ${totalHours.toFixed(1)}h toplam</span>`;
+      } else {
+        ttTotalContent = `<span style="font-weight:800;color:${hourColor};">${hours.toFixed(1)}h</span>`;
+      }
+      // Yarım günde beklenti satırı ekle
+      const ttExpected = wdVal === 0.5
+        ? `<div class="tt-row" style="margin-top:2px;">
+            <span style="flex:1;font-size:10px;color:var(--yellow);">½ Gün beklentisi</span>
+            <span style="font-size:10px;color:var(--yellow);">${expectedH}h</span>
+          </div>`
+        : '';
+      const ttTotal = `<div class="tt-row" style="margin-top:2px;border-top:1px solid var(--border);padding-top:4px;">
+        <span style="flex:1;font-weight:600;color:var(--text2);">Toplam</span>
+        ${ttTotalContent}
+      </div>${ttExpected}`;
+      ttBody = ttRows + ttSep + ttTotal;
+    }
+
+    // Yarım gün ise gün numarasının yanına küçük ½ etiketi
+    const halfDayLabel = wdVal === 0.5
+      ? `<span style="font-size:9px;color:var(--yellow);font-weight:600;margin-left:2px;">½</span>`
+      : '';
+    html += `<div class="cal-day ${baseCls}">
+      <div class="cal-day-header">
+        <span class="day-num" style="color:${isWork ? 'var(--text)' : 'var(--text3)'}; ${!isWork && hours > 0 ? 'opacity:0.6;' : ''}">${d}${halfDayLabel}</span>
+        ${badgeHtml}
+      </div>
+      ${projListHtml}
+      ${segHtml}
+      <div class="day-tooltip">${ttDate}${ttBody}</div>
+    </div>`;
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ================================================================
+// PROJECTS PAGE
+// ================================================================
+function renderProjects() {
+  if (!allData.length) return;
+  const container = document.getElementById('projects-content');
+  const sortBy = document.getElementById('proj-sort').value;
+  const filterMode = document.getElementById('proj-filter').value;
+
+  const source = filterMode === 'work' ? workData : allData.filter(r => !HOLIDAY_PROJECTS.includes(r.project));
+
+  // Aggregate by project
+  const projMap = {};
+  source.forEach(r => {
+    if (!r.project || HOLIDAY_PROJECTS.includes(r.project)) return;
+    if (!projMap[r.project]) projMap[r.project] = { hours: 0, persons: new Set(), entries: [] };
+    projMap[r.project].hours += r.hours;
+    projMap[r.project].persons.add(r.person);
+    projMap[r.project].entries.push(r);
+  });
+
+  let projArr = Object.entries(projMap).map(([name, d]) => ({
+    name, hours: d.hours, personCount: d.persons.size, persons: [...d.persons], entries: d.entries
+  }));
+
+  if (sortBy === 'hours') projArr.sort((a, b) => b.hours - a.hours);
+  else if (sortBy === 'people') projArr.sort((a, b) => b.personCount - a.personCount);
+  else projArr.sort((a, b) => a.name.localeCompare(b.name));
+
+  const totalHours = projArr.reduce((s, p) => s + p.hours, 0);
+
+  // Top 5 for bar chart
+  const top5 = projArr.slice(0, 5);
+
+  container.innerHTML = `
+    <!-- STATS -->
+    <div class="grid-4 mb-24">
+      <div class="stat-chip"><div class="label">Toplam Proje</div><div class="value accent">${projArr.length}</div></div>
+      <div class="stat-chip"><div class="label">Toplam Saat</div><div class="value green">${totalHours.toFixed(1)}</div></div>
+      <div class="stat-chip"><div class="label">En Çok Girilen</div><div class="value yellow" style="font-size:14px;">${projArr[0]?.name.substring(0,20) || '-'}${projArr[0]?.name.length > 20 ? '…' : ''}</div></div>
+      <div class="stat-chip"><div class="label">En Az Girilen</div><div class="value orange" style="font-size:14px;">${projArr[projArr.length-1]?.name.substring(0,20) || '-'}${projArr[projArr.length-1]?.name.length > 20 ? '…' : ''}</div></div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="grid-2 mb-24">
+      <div class="card">
+        <h3>Proje Saat Dağılımı (Top 10)</h3>
+        <div class="chart-box"><canvas id="chart-proj-bar"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Proje Pasta Dağılımı</h3>
+        <div class="chart-box" style="display:flex;justify-content:center;align-items:center;">
+          <canvas id="chart-proj-doughnut" style="max-width:100%;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="card">
+      <h3>Tüm Projeler</h3>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr>
+            <th>#</th>
+            <th onclick="sortProjectTable('name')">Proje Adı ↕</th>
+            <th onclick="sortProjectTable('hours')">Toplam Saat ↕</th>
+            <th onclick="sortProjectTable('pct')">Payı ↕</th>
+            <th onclick="sortProjectTable('people')">Kişi Sayısı ↕</th>
+            <th>Kişiler</th>
+            <th>Ort. Kişi Başı</th>
+          </tr></thead>
+          <tbody>
+            ${projArr.map((p, i) => {
+              const pct = totalHours > 0 ? (p.hours/totalHours*100) : 0;
+              const color = COLORS[i % COLORS.length];
+              return `<tr>
+                <td class="rank">#${i+1}</td>
+                <td>
+                  <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:8px;"></span>
+                  <strong>${escHtml(p.name)}</strong>
+                </td>
+                <td><strong>${p.hours.toFixed(1)}</strong></td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:60px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+                      <div style="width:${pct.toFixed(1)}%;height:100%;background:${color};border-radius:3px;"></div>
+                    </div>
+                    <span style="font-size:12px;">${pct.toFixed(1)}%</span>
+                  </div>
+                </td>
+                <td>${p.personCount} kişi</td>
+                <td style="font-size:11px;color:var(--text2);">${p.persons.slice(0,3).join(', ')}${p.persons.length > 3 ? ` +${p.persons.length-3}` : ''}</td>
+                <td style="color:var(--text2);">${(p.hours/p.personCount).toFixed(1)}h</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  requestAnimationFrame(() => {
+    const top10 = projArr.slice(0, 10);
+
+    // Horizontal bar
+    destroyChart('chart-proj-bar');
+    chartInstances['chart-proj-bar'] = new Chart(document.getElementById('chart-proj-bar'), {
+      type: 'bar',
+      data: {
+        labels: top10.map(p => p.name.length > 20 ? p.name.substring(0,20)+'…' : p.name),
+        datasets: [{
+          label: 'Saat',
+          data: top10.map(p => p.hours),
+          backgroundColor: top10.map((_, i) => COLORS[i % COLORS.length] + 'cc'),
+          borderColor: top10.map((_, i) => COLORS[i % COLORS.length]),
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: ctx => ` ${ctx.raw.toFixed(1)} saat (${totalHours > 0 ? (ctx.raw/totalHours*100).toFixed(1) : 0}%)`
+        }}},
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#e2e8f0' } },
+          y: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { size: 11 } } }
+        }
+      }
+    });
+
+    // Doughnut
+    renderDoughnut('chart-proj-doughnut',
+      projArr.map(p => p.name.length > 20 ? p.name.substring(0,20)+'…' : p.name),
+      projArr.map(p => p.hours),
+      projArr.map((_, i) => COLORS[i % COLORS.length])
+    );
+  });
+}
+
+// ================================================================
+// COMPARE PAGE
+// ================================================================
+function renderCompare() {
+  if (!allData.length) return;
+  const container = document.getElementById('compare-content');
+
+  // Person hours summary (toplam + kıymetli)
+  const personMap = {};
+  workData.forEach(r => {
+    if (!personMap[r.person]) personMap[r.person] = { hours: 0, kiymetliHours: 0, projects: new Set() };
+    personMap[r.person].hours += r.hours;
+    // Kıymetli saat: projectClassifications[proj] !== false (undefined veya true = kıymetli)
+    if (projectClassifications[r.project] !== false) {
+      personMap[r.person].kiymetliHours += r.hours;
+    }
+    personMap[r.person].projects.add(r.project);
+  });
+
+  const personArr = Object.entries(personMap)
+    .map(([n, d]) => ({ name: n, hours: d.hours, kiymetliHours: d.kiymetliHours, projCount: d.projects.size }))
+    .sort((a, b) => b.hours - a.hours);
+
+  const workdayCount = Object.values(workdays).filter(v => v > 0).length;
+  const potential    = Object.values(workdays).reduce((s, v) => s + v * 8, 0);
+
+  // Utilization bazı — toggle'a göre toplam veya kıymetli
+  const totalTeamHours    = personArr.reduce((s, p) => s + p.hours, 0);
+  const kiymetliTeamHours = personArr.reduce((s, p) => s + p.kiymetliHours, 0);
+  const utilTeamHours     = kiymetliAktiviteToggle ? kiymetliTeamHours : totalTeamHours;
+  const avgUtil           = potential > 0 ? (utilTeamHours / (potential * personArr.length) * 100) : 0;
+  const avgUtilColor   = avgUtil > 100  ? 'var(--over)'
+                       : avgUtil >= 85  ? 'var(--green)'
+                       : avgUtil >= 60  ? 'var(--yellow)'
+                       : 'var(--red)';
+  const avgUtilBadge   = avgUtil > 100  ? '<span style="font-size:12px;font-weight:600;color:var(--over);margin-left:8px;">⚡ Mesai ortalaması</span>'
+                       : avgUtil >= 85  ? '<span style="font-size:12px;font-weight:600;color:var(--green);margin-left:8px;">✓ Yüksek verimlilik</span>'
+                       : avgUtil >= 60  ? '<span style="font-size:12px;font-weight:600;color:var(--yellow);margin-left:8px;">~ Orta verimlilik</span>'
+                       : '<span style="font-size:12px;font-weight:600;color:var(--red);margin-left:8px;">↓ Düşük verimlilik</span>';
+  const avgBarW        = Math.min(100, avgUtil).toFixed(1);
+
+  container.innerHTML = `
+    <!-- GENEL ORTALAMA UTİLİZATİON BANNER -->
+    <div class="card mb-24" style="border-color:${avgUtilColor};background:var(--surface2);">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">
+            Ekip Genel Ortalama Utilization
+            ${kiymetliAktiviteToggle ? '<span style="color:var(--accent);font-size:10px;font-weight:700;margin-left:6px;">✦ Kıymetli Aktiviteye Göre</span>' : ''}
+          </div>
+          <div style="display:flex;align-items:baseline;gap:8px;">
+            <span style="font-size:42px;font-weight:800;color:${avgUtilColor};line-height:1;">${avgUtil.toFixed(1)}<span style="font-size:20px;font-weight:500;color:var(--text2);">%</span></span>
+            ${avgUtilBadge}
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:6px;">
+            ${kiymetliAktiviteToggle
+              ? `Kıymetli: <strong style="color:var(--accent);">${kiymetliTeamHours.toFixed(1)}h</strong>
+                 &nbsp;(Toplam: <span>${totalTeamHours.toFixed(1)}h</span>)`
+              : `Toplam: <strong style="color:var(--text2);">${totalTeamHours.toFixed(1)}h</strong>`
+            }
+            &nbsp;/&nbsp; Potansiyel: <strong style="color:var(--text2);">${(potential * personArr.length).toFixed(0)}h</strong>
+            &nbsp;·&nbsp; ${personArr.length} kişi × ${potential.toFixed(0)}h
+            &nbsp;·&nbsp; <span style="color:var(--accent);">📅 ${fmtDisplay(dataMinDate)} – ${fmtDisplay(dataMaxDate)}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">En Yüksek</div>
+            <div style="font-size:18px;font-weight:700;color:var(--green);">${potential > 0 ? (Math.max(...personArr.map(p => kiymetliAktiviteToggle ? p.kiymetliHours : p.hours)) / potential * 100).toFixed(0) : 0}%</div>
+            <div style="font-size:10px;color:var(--text3);">${personArr.reduce((b, p) => (kiymetliAktiviteToggle ? p.kiymetliHours : p.hours) > (kiymetliAktiviteToggle ? b.kiymetliHours : b.hours) ? p : b, personArr[0])?.name?.split(' ')[0] || '—'}</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">En Düşük</div>
+            <div style="font-size:18px;font-weight:700;color:var(--red);">${potential > 0 ? (Math.min(...personArr.map(p => kiymetliAktiviteToggle ? p.kiymetliHours : p.hours)) / potential * 100).toFixed(0) : 0}%</div>
+            <div style="font-size:10px;color:var(--text3);">${personArr.reduce((w, p) => (kiymetliAktiviteToggle ? p.kiymetliHours : p.hours) < (kiymetliAktiviteToggle ? w.kiymetliHours : w.hours) ? p : w, personArr[0])?.name?.split(' ')[0] || '—'}</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sapma</div>
+            <div style="font-size:18px;font-weight:700;color:var(--text2);">${personArr.length > 1 ? (Math.max(...personArr.map(p => kiymetliAktiviteToggle ? p.kiymetliHours : p.hours)) - Math.min(...personArr.map(p => kiymetliAktiviteToggle ? p.kiymetliHours : p.hours))).toFixed(0) : 0}h</div>
+            <div style="font-size:10px;color:var(--text3);">maks−min fark</div>
+          </div>
+        </div>
+      </div>
+      <!-- Progress bar -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px;">
+          <span>0%</span>
+          <span style="color:${avgUtilColor};font-weight:700;">${avgUtil.toFixed(1)}%</span>
+          <span>${avgUtil > 100 ? avgUtil.toFixed(0)+'%' : '100%'}</span>
+        </div>
+        <div style="height:10px;background:var(--surface);border-radius:6px;overflow:hidden;position:relative;">
+          <div style="height:100%;width:${avgBarW}%;background:${avgUtilColor};border-radius:6px;transition:width 0.6s ease;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERSON UTILIZATION COMPARISON -->
+    <div class="card mb-24">
+      <h3>Kişi Utilization Karşılaştırması</h3>
+      <div class="chart-box"><canvas id="chart-util-compare" style="max-height:350px;"></canvas></div>
+    </div>
+
+    <!-- PERSON HOURS BAR + RADAR -->
+    <div class="grid-2 mb-24">
+      <div class="card">
+        <h3>Kişi Bazlı Toplam Saat</h3>
+        <div class="chart-box"><canvas id="chart-person-hours"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Kişi Başı Proje Sayısı</h3>
+        <div class="chart-box"><canvas id="chart-person-projs"></canvas></div>
+      </div>
+    </div>
+
+    <!-- TOP PERSONS TABLE -->
+    <div class="card mb-24">
+      <h3>Kişi Performans Özeti</h3>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr>
+            <th>#</th><th>Personel</th><th>Toplam Saat</th>
+            <th>Utilization${kiymetliAktiviteToggle ? ' <span style="color:var(--accent);font-size:9px;">✦ Kıymetli</span>' : ''}</th>
+            <th>Proje Sayısı</th><th>Günlük Ort.</th><th>Durum</th>
+          </tr></thead>
+          <tbody>
+            ${personArr.map((p, i) => {
+              const utilHours = kiymetliAktiviteToggle ? p.kiymetliHours : p.hours;
+              const util      = potential > 0 ? (utilHours / potential * 100) : 0;
+              const color = util > 100   ? 'var(--over)'
+                          : util >= 85  ? 'var(--green)'
+                          : util >= 60  ? 'var(--yellow)'
+                          : 'var(--red)';
+              const badge = util > 100  ? '<span class="badge" style="background:rgba(56,189,248,0.2);color:var(--over);">⚡ Mesai</span>'
+                          : util >= 85  ? '<span class="badge badge-green">Yüksek</span>'
+                          : util >= 60  ? '<span class="badge badge-yellow">Orta</span>'
+                          : '<span class="badge badge-red">Düşük</span>';
+              const barW = Math.min(100, util).toFixed(1);
+              return `<tr>
+                <td class="rank">#${i+1}</td>
+                <td><strong>${escHtml(p.name)}</strong></td>
+                <td>${p.hours.toFixed(1)} saat</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:80px;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;">
+                      <div style="width:${barW}%;height:100%;background:${color};border-radius:4px;"></div>
+                    </div>
+                    <span style="font-weight:700;color:${color};">${util.toFixed(1)}%</span>
+                  </div>
+                </td>
+                <td>${p.projCount}</td>
+                <td style="color:var(--text2);">${workdayCount > 0 ? (p.hours/workdayCount).toFixed(1) : '0'}h</td>
+                <td>${badge}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DAILY HOURS TREND — Rev 9: tam genişlik, grid dışında -->
+    <div class="card mb-24" style="width:100%;">
+      <h3>Günlük Toplam Saat Trendi (Tüm Ekip)</h3>
+      <div class="chart-box" style="position:relative;height:280px;max-height:300px;">
+        <canvas id="chart-daily-trend"></canvas>
+      </div>
+    </div>
+
+    <!-- ACTIVITY TYPE PIE -->
+    <div class="grid-2">
+      <div class="card">
+        <h3>Aktivite Tipi Dağılımı (Tüm Ekip)</h3>
+        <div class="chart-box" style="display:flex;justify-content:center;align-items:center;">
+          <canvas id="chart-compare-subtype" style="max-width:100%;"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Lokasyon Dağılımı (Tüm Ekip)</h3>
+        <div class="chart-box" style="display:flex;justify-content:center;align-items:center;">
+          <canvas id="chart-compare-location" style="max-width:100%;"></canvas>
+        </div>
+      </div>
+    </div>
+  `;
+
+  requestAnimationFrame(() => {
+    // Utilization bar chart — toggle ON ise kıymetli + kıymetsiz stacked
+    destroyChart('chart-util-compare');
+    const kiymetliVals   = personArr.map(p => potential > 0 ? (p.kiymetliHours / potential * 100) : 0);
+    const kiymetlsizVals = personArr.map(p => potential > 0 ? ((p.hours - p.kiymetliHours) / potential * 100) : 0);
+    const utilVals       = personArr.map(p => potential > 0
+      ? ((kiymetliAktiviteToggle ? p.kiymetliHours : p.hours) / potential * 100) : 0);
+    const yMax = Math.ceil(Math.max(...personArr.map(p => p.hours / (potential || 1) * 100), 100) / 10) * 10 + 10;
+
+    const datasets = kiymetliAktiviteToggle ? [
+      {
+        // Kıymetli dilimi — renkli
+        label: 'Kıymetli Utilization %',
+        data: kiymetliVals,
+        backgroundColor: kiymetliVals.map(v => v > 100 ? 'rgba(56,189,248,0.65)' : v >= 85 ? 'rgba(34,197,94,0.7)' : v >= 60 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'),
+        borderColor:     kiymetliVals.map(v => v > 100 ? '#38bdf8' : v >= 85 ? '#22c55e' : v >= 60 ? '#eab308' : '#ef4444'),
+        borderWidth: 1,
+        borderRadius: 0,
+        stack: 'util',
+      },
+      {
+        // Kıymetsiz dilimi — soluk gri, üste eklenir
+        label: 'Kıymetsiz %',
+        data: kiymetlsizVals,
+        backgroundColor: 'rgba(100,116,139,0.28)',
+        borderColor:     'rgba(100,116,139,0.5)',
+        borderWidth: 1,
+        borderRadius: 4,
+        stack: 'util',
+      },
+      {
+        label: 'Hedef (100%)',
+        data: personArr.map(() => 100),
+        type: 'line',
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderDash: [4, 4],
+        pointRadius: 0,
+        fill: false,
+        stack: undefined,
+      }
+    ] : [
+      {
+        label: 'Utilization %',
+        data: utilVals,
+        backgroundColor: utilVals.map(v => v > 100 ? 'rgba(56,189,248,0.65)' : v >= 85 ? 'rgba(34,197,94,0.7)' : v >= 60 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'),
+        borderColor:     utilVals.map(v => v > 100 ? '#38bdf8' : v >= 85 ? '#22c55e' : v >= 60 ? '#eab308' : '#ef4444'),
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: 'Hedef (100%)',
+        data: personArr.map(() => 100),
+        type: 'line',
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderDash: [4, 4],
+        pointRadius: 0,
+        fill: false,
+      }
+    ];
+
+    chartInstances['chart-util-compare'] = new Chart(document.getElementById('chart-util-compare'), {
+      type: 'bar',
+      data: {
+        labels: personArr.map(p => p.name),
+        datasets,
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const v = ctx.raw;
+                if (ctx.dataset.label === 'Kıymetsiz %') return ` Kıymetsiz: ${v?.toFixed(1)}%`;
+                if (ctx.dataset.label?.includes('Kıymetli')) return ` Kıymetli: ${v?.toFixed(1)}%`;
+                return ` ${ctx.dataset.label}: ${v?.toFixed ? v.toFixed(1) : v}%`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: kiymetliAktiviteToggle,
+            grid: { display: false },
+            ticks: { color: '#e2e8f0', font: { size: 11 } }
+          },
+          y: {
+            stacked: kiymetliAktiviteToggle,
+            min: 0, max: yMax,
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            ticks: { color: '#94a3b8', callback: v => v + '%' }
+          }
+        }
+      }
+    });
+
+    // Kişi sayısına göre dinamik label font boyutu hesabı
+    // n=1-4: 11px, n=5-8: 10px, n=9-12: 9px, n>12: 8px — ayrıca konteyner genişliğine de bakılır
+    function barLabelFontSize(n, canvasId) {
+      const canvasEl = document.getElementById(canvasId);
+      const containerW = canvasEl ? canvasEl.parentElement.offsetWidth : 400;
+      const barW = containerW / n; // yaklaşık bar genişliği px
+      // bar genişliği daraldıkça font küçülür
+      if (barW > 60) return 11;
+      if (barW > 45) return 10;
+      if (barW > 32) return 9;
+      return 8;
+    }
+
+    // Person hours — bar üzerinde saat label'ı
+    destroyChart('chart-person-hours');
+    const hoursLabelSize = barLabelFontSize(personArr.length, 'chart-person-hours');
+    chartInstances['chart-person-hours'] = new Chart(document.getElementById('chart-person-hours'), {
+      type: 'bar',
+      data: {
+        labels: personArr.map(p => p.name),
+        datasets: [{
+          label: 'Toplam Saat',
+          data: personArr.map(p => p.hours),
+          backgroundColor: personArr.map((_, i) => COLORS[i % COLORS.length] + 'bb'),
+          borderColor: personArr.map((_, i) => COLORS[i % COLORS.length]),
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        layout: { padding: { top: hoursLabelSize + 10 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            anchor: 'end',
+            align: 'end',
+            color: '#e2e8f0',
+            font: { size: hoursLabelSize, weight: 'bold' },
+            // n>15 ise sadece tam sayı göster, dar barlarda 'h' suffixini de kaldır
+            formatter: (v, ctx) => {
+              const n = ctx.chart.data.labels.length;
+              const canvasW = ctx.chart.width;
+              const barW = canvasW / n;
+              if (barW < 28) return ''; // çok dar — label gösterme
+              if (barW < 38) return Math.round(v) + '';
+              return v.toFixed(v % 1 === 0 ? 0 : 1) + 'h';
+            },
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { size: 10 }, maxRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+
+    // Person project count — bar üzerinde sayı label'ı
+    destroyChart('chart-person-projs');
+    const projLabelSize = barLabelFontSize(personArr.length, 'chart-person-projs');
+    chartInstances['chart-person-projs'] = new Chart(document.getElementById('chart-person-projs'), {
+      type: 'bar',
+      data: {
+        labels: personArr.map(p => p.name),
+        datasets: [{
+          label: 'Proje Sayısı',
+          data: personArr.map(p => p.projCount),
+          backgroundColor: 'rgba(124,92,191,0.6)',
+          borderColor: '#7c5cbf',
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        layout: { padding: { top: projLabelSize + 10 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            anchor: 'end',
+            align: 'end',
+            color: '#e2e8f0',
+            font: { size: projLabelSize, weight: 'bold' },
+            formatter: (v, ctx) => {
+              const n = ctx.chart.data.labels.length;
+              const canvasW = ctx.chart.width;
+              const barW = canvasW / n;
+              if (barW < 28) return '';      // çok dar — gösterme
+              if (barW < 42) return v + '';  // sadece sayı
+              return v + ' prj';             // sayı + kısa suffix
+            },
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { size: 10 }, maxRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', stepSize: 1 } }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+
+    // Daily trend — Rev 9: maintainAspectRatio:false, tam genişlik
+    const dailyTotals = {};
+    workData.forEach(r => {
+      dailyTotals[r.date] = (dailyTotals[r.date] || 0) + r.hours;
+    });
+    const sortedDates = Object.keys(dailyTotals).sort();
+    destroyChart('chart-daily-trend');
+    chartInstances['chart-daily-trend'] = new Chart(document.getElementById('chart-daily-trend'), {
+      type: 'line',
+      data: {
+        labels: sortedDates.map(d => { const [,m,dd] = d.split('-'); return `${dd}.${m}`; }),
+        datasets: [{
+          label: 'Toplam Saat',
+          data: sortedDates.map(d => dailyTotals[d]),
+          borderColor: '#4f8ef7',
+          backgroundColor: 'rgba(79,142,247,0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#4f8ef7',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // Rev 9
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
+        }
+      }
+    });
+
+    // Subtype pie
+    const subMap = {};
+    workData.forEach(r => { const s = r.subtype || 'Diğer'; subMap[s] = (subMap[s]||0) + r.hours; });
+    const subArr = Object.entries(subMap).sort((a,b) => b[1]-a[1]);
+    renderDoughnut('chart-compare-subtype', subArr.map(([s]) => s), subArr.map(([,h]) => h), subArr.map((_,i) => COLORS[(i+4)%COLORS.length]));
+
+    // Location pie
+    const locMap = {};
+    workData.forEach(r => { const l = r.location || 'Bilinmiyor'; locMap[l] = (locMap[l]||0) + r.hours; });
+    const locArr = Object.entries(locMap).sort((a,b) => b[1]-a[1]);
+    renderDoughnut('chart-compare-location', locArr.map(([l]) => l), locArr.map(([,h]) => h), locArr.map((_,i) => COLORS[(i+10)%COLORS.length]));
+  });
+}
+
+// ================================================================
+// HEATMAP
+// ================================================================
+function renderHeatmap() {
+  if (!allData.length) return;
+  const container = document.getElementById('heatmap-content');
+  const metric = document.getElementById('hm-metric').value;
+
+  // Get all persons and projects
+  const persons = [...new Set(workData.map(r => r.person).filter(Boolean))].sort();
+  const projects = [...new Set(workData.map(r => r.project).filter(p => p && !HOLIDAY_PROJECTS.includes(p)))];
+
+  // Build matrix
+  const matrix = {};
+  const personTotals = {};
+  const projTotals = {};
+
+  workData.forEach(r => {
+    if (!r.person || !r.project) return;
+    const key = `${r.person}||${r.project}`;
+    matrix[key] = (matrix[key] || 0) + r.hours;
+    personTotals[r.person] = (personTotals[r.person] || 0) + r.hours;
+    projTotals[r.project] = (projTotals[r.project] || 0) + r.hours;
+  });
+
+  // Sort projects by total hours
+  const sortedProjects = projects.sort((a, b) => (projTotals[b] || 0) - (projTotals[a] || 0));
+  const sortedPersons = persons.sort((a, b) => (personTotals[b] || 0) - (personTotals[a] || 0));
+
+  // Find max for color scale
+  const allVals = Object.values(matrix);
+  const maxVal = Math.max(...allVals, 1);
+
+  function getColor(val) {
+    if (val === 0) return 'hm-0';
+    const intensity = val / maxVal;
+    return ''; // handled via inline style
+  }
+
+  function getCellStyle(val, person) {
+    if (val === 0) return '';
+    const intensity = Math.min(1, val / maxVal);
+    const alpha = 0.15 + intensity * 0.7;
+    const r = Math.round(79 + (239-79) * intensity);
+    const g = Math.round(142 + (68-142) * intensity * 0.5);
+    const b = Math.round(247 + (68-247) * intensity);
+    // Blue to red gradient
+    const r2 = Math.round(79 * (1-intensity) + 239 * intensity);
+    const g2 = Math.round(142 * (1-intensity) + 68 * intensity * 0.3);
+    const b2 = Math.round(247 * (1-intensity) + 68 * intensity * 0.1);
+    return `background:rgba(${r2},${g2},${b2},${alpha});color:${intensity > 0.5 ? '#fff' : 'var(--text)'};`;
+  }
+
+  function getDisplayVal(val, person) {
+    if (val === 0) return '';
+    if (metric === 'hours') return val.toFixed(val < 10 ? 1 : 0);
+    if (metric === 'days') return (val/8).toFixed(1);
+    if (metric === 'pct') {
+      const total = personTotals[person] || 1;
+      return (val/total*100).toFixed(0)+'%';
+    }
+    return val.toFixed(1);
+  }
+
+  function getTip(val, person, proj) {
+    if (val === 0) return `${person} → ${proj}: Giriş yok`;
+    const pct = personTotals[person] ? (val/personTotals[person]*100).toFixed(1) : 0;
+    return `${person} → ${proj}: ${val.toFixed(1)}h (${pct}%)`;
+  }
+
+  // Legend
+  const legendHtml = `
+    <div class="flex items-center gap-8 mb-16" style="flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--text3);">Renk Ölçeği:</span>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <div style="width:16px;height:16px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);"></div>
+        <span style="font-size:11px;color:var(--text3);">0 saat</span>
+      </div>
+      <div style="width:120px;height:16px;border-radius:3px;background:linear-gradient(to right, rgba(79,142,247,0.3), rgba(239,68,68,0.9));"></div>
+      <span style="font-size:11px;color:var(--text3);">Az → Çok</span>
+      <span style="font-size:11px;color:var(--text3);margin-left:8px;">Max: ${maxVal.toFixed(1)}h</span>
+    </div>
+  `;
+
+  let tableHtml = `<table class="heatmap-table">
+    <thead>
+      <tr>
+        <th style="min-width:140px;">Personel ↓ / Proje →</th>
+        <th style="text-align:right;font-weight:600;color:var(--text2);">Toplam</th>
+        ${sortedProjects.map(p => `<th style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);max-width:28px;overflow:hidden;height:100px;white-space:nowrap;" title="${escHtml(p)}">${escHtml(p.length > 18 ? p.substring(0,18)+'…' : p)}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+  `;
+
+  // Rev 8: marginal bar için max değerler
+  const maxProjTotal   = Math.max(...sortedProjects.map(p => projTotals[p] || 0), 1);
+  const maxPersonTotal = Math.max(...sortedPersons.map(p => personTotals[p] || 0), 1);
+
+  // Project totals row — Rev 8: dikey mini bar
+  const grandTotal = sortedProjects.reduce((s, p) => s + (projTotals[p] || 0), 0);
+  tableHtml += `<tr>
+    <th style="font-size:11px;color:var(--text3);font-weight:600;">Proje Toplamı</th>
+    <th style="text-align:right;font-size:12px;color:var(--accent);">${grandTotal.toFixed(0)}h</th>
+    ${sortedProjects.map(proj => {
+      const v      = projTotals[proj] || 0;
+      const barH   = Math.round((v / maxProjTotal) * 40); // Rev 8: yükseklik px
+      return `<td style="background:var(--surface2);font-size:10px;font-weight:700;color:var(--accent);text-align:center;vertical-align:bottom;padding-bottom:2px;" data-tip="${escHtml(proj)}: ${v.toFixed(1)}h">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:44px;">
+          <div style="width:14px;height:${barH}px;background:rgba(79,142,247,0.6);border-radius:2px 2px 0 0;margin-bottom:2px;"></div>
+          <span>${v.toFixed(0)}h</span>
+        </div>
+      </td>`;
+    }).join('')}
+  </tr>`;
+
+  sortedPersons.forEach(person => {
+    const pTotal = personTotals[person] || 0;
+    // Rev 8: yatay mini bar genişliği
+    const barW   = Math.round((pTotal / maxPersonTotal) * 80);
+    tableHtml += `<tr>
+      <td style="font-weight:600;font-size:12px;white-space:nowrap;">${escHtml(person)}</td>
+      <td style="text-align:right;font-weight:700;color:var(--accent);font-size:12px;">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+          <div style="width:${barW}px;height:6px;background:rgba(79,142,247,0.6);border-radius:3px;flex-shrink:0;"></div>
+          <span style="white-space:nowrap;">${pTotal.toFixed(1)}h</span>
+        </div>
+      </td>
+      ${sortedProjects.map(proj => {
+        const val = matrix[`${person}||${proj}`] || 0;
+        const displayVal = getDisplayVal(val, person);
+        const style = val > 0 ? getCellStyle(val, person) : '';
+        const tipText = getTip(val, person, proj);
+        return `<td class="${val === 0 ? 'hm-0' : ''}" style="${style}" data-tip="${escHtml(tipText)}">${displayVal}</td>`;
+      }).join('')}
+    </tr>`;
+  });
+
+  tableHtml += '</tbody></table>';
+
+  container.innerHTML = `
+    <div class="card">
+      ${legendHtml}
+      <div class="heatmap-wrap">
+        ${tableHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ================================================================
+// TEAM CALENDAR
+// ================================================================
+function renderTeamCal() {
+  if (!allData.length) return;
+  const container = document.getElementById('teamcal-content');
+  const filterMode = document.getElementById('tc-filter').value;
+  const mode       = document.getElementById('tc-mode').value;
+
+  // Tüm kişiler (toplam saate göre sıralı)
+  const persons = [...new Set(workData.map(r => r.person).filter(Boolean))];
+  const personHours = {};         // gerçek toplam
+  const personKiymetliHours = {}; // yalnızca kıymetli
+  workData.forEach(r => {
+    personHours[r.person] = (personHours[r.person] || 0) + r.hours;
+    if (projectClassifications[r.project] !== false) {
+      personKiymetliHours[r.person] = (personKiymetliHours[r.person] || 0) + r.hours;
+    }
+  });
+  persons.sort((a, b) => (personHours[b] || 0) - (personHours[a] || 0));
+
+  // Ayın tüm günleri
+  const daysInMonth = new Date(monthYear, monthMo + 1, 0).getDate();
+  const allDays = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt  = fmtDate(monthYear, monthMo + 1, d);
+    const dow = new Date(dt).getDay();
+    allDays.push({ dt, d, dow, isWknd: dow === 0 || dow === 6, wdVal: workdays[dt] || 0 });
+  }
+
+  // Filtre uygula
+  const days = filterMode === 'workdays'
+    ? allDays.filter(day => day.wdVal > 0)
+    : allDays;
+
+  // Kişi × gün — toplam saat matrisi
+  const matrix = {};
+  workData.forEach(r => {
+    if (!matrix[r.person]) matrix[r.person] = {};
+    matrix[r.person][r.date] = (matrix[r.person][r.date] || 0) + r.hours;
+  });
+
+  // Kişi × gün — yalnızca kıymetli saat matrisi
+  const kiymetliMatrix = {};
+  workData.forEach(r => {
+    if (projectClassifications[r.project] === false) return; // kıymetsiz — atla
+    if (!kiymetliMatrix[r.person]) kiymetliMatrix[r.person] = {};
+    kiymetliMatrix[r.person][r.date] = (kiymetliMatrix[r.person][r.date] || 0) + r.hours;
+  });
+
+  // Subtitle
+  document.getElementById('teamcal-subtitle').textContent =
+    `${monthLabel} · ${persons.length} kişi · ${days.length} gün`;
+
+  // Türkçe gün kısaltmaları (Pazartesi bazlı)
+  const dayNamesFull = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+
+  // Legend
+  const legendHtml = `
+    <div class="tc-legend">
+      <span style="color:var(--text3);font-size:11px;font-weight:600;">Renk:</span>
+      <span><span class="tc-legend-dot" style="background:rgba(34,197,94,0.25);border:1px solid rgba(34,197,94,0.5);"></span>Tam (8h / ½ gün=4h)</span>
+      <span><span class="tc-legend-dot" style="background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.5);"></span>Mesai (beklentinin üstü)</span>
+      <span><span class="tc-legend-dot" style="background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.4);"></span>Eksik (beklentinin altı)</span>
+      <span><span class="tc-legend-dot" style="background:rgba(239,68,68,0.06);border:1px dashed rgba(239,68,68,0.3);"></span>Giriş yok</span>
+      <span><span class="tc-legend-dot" style="background:rgba(100,116,139,0.1);border:1px solid rgba(100,116,139,0.2);"></span>Tatil/Haftasonu</span>
+      ${kiymetliAktiviteToggle ? '<span style="color:var(--accent);font-weight:700;font-size:11px;">✦ Kıymetli Aktiviteye Göre — rakamlar ve renkler yalnızca kıymetli saatleri yansıtır</span>' : ''}
+    </div>`;
+
+  // Tablo başlığı
+  let html = `<table class="tc-table">
+    <thead><tr>
+      <th style="position:sticky;left:0;top:0;z-index:4;background:var(--surface);min-width:88px;padding:6px 10px;font-size:11px;color:var(--text3);text-align:left;border-radius:6px;border:1px solid var(--border);">
+        Gün
+      </th>`;
+
+  // Kişi sütun başlıkları
+  persons.forEach(p => {
+    const short      = p.length > 12 ? p.substring(0, 12) + '…' : p;
+    const total      = personHours[p] || 0;
+    const kTotal     = personKiymetliHours[p] || 0;
+    const dispHours  = kiymetliAktiviteToggle ? kTotal : total;
+    const titleHint  = kiymetliAktiviteToggle
+      ? `${escHtml(p)} — ${kTotal.toFixed(1)}h kıymetli / ${total.toFixed(1)}h toplam`
+      : `${escHtml(p)} — ${total.toFixed(1)}h toplam`;
+    html += `<th class="tc-person" title="${titleHint}">
+      ${escHtml(short)}
+      <div style="font-size:9px;color:${kiymetliAktiviteToggle ? 'var(--accent)' : 'var(--text3)'};font-weight:400;margin-top:1px;">${dispHours.toFixed(0)}h${kiymetliAktiviteToggle ? ' ✦' : ''}</div>
+    </th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  // Satırlar — her gün
+  days.forEach(({ dt, d, dow, isWknd, wdVal }) => {
+    const isHolid  = wdVal === 0 && !isWknd;
+    const isHalfD  = wdVal === 0.5;
+    const dayLabel = dayNamesFull[dow];
+
+    // Satır sınıfı
+    let rowCls = '';
+    if (isWknd)  rowCls = 'tc-row-wknd';
+    if (isHolid) rowCls = 'tc-row-holid';
+
+    // Gün etiketi sınıfı
+    let dayCls = '';
+    if (isWknd)  dayCls = 'wknd';
+    if (isHolid) dayCls = 'holid';
+    if (isHalfD) dayCls = 'halfd';
+
+    // Haftasonu / tatil etiketi
+    const dayExtra = isWknd  ? '<span style="font-size:9px;color:var(--text3);margin-left:4px;">Hftsnı</span>'
+                   : isHolid ? '<span style="font-size:9px;color:var(--red);margin-left:4px;">Tatil</span>'
+                   : isHalfD ? '<span style="font-size:9px;color:var(--yellow);margin-left:4px;">½</span>'
+                   : '';
+
+    html += `<tr class="${rowCls}">
+      <td class="tc-day-col ${dayCls}">
+        <span style="font-size:13px;font-weight:700;">${String(d).padStart(2,'0')}</span>
+        <span style="color:var(--text3);font-size:10px;margin-left:5px;">${dayLabel}</span>
+        ${dayExtra}
+      </td>`;
+
+    // Her kişi için hücre
+    persons.forEach(p => {
+      const totalH    = (matrix[p] && matrix[p][dt]) || 0;           // gerçek toplam
+      const kiymetliH = (kiymetliMatrix[p] && kiymetliMatrix[p][dt]) || 0; // kıymetli
+      // Renk ve eşik hesabı için toggle'a göre baz saat
+      const hours     = kiymetliAktiviteToggle ? kiymetliH : totalH;
+      const isOffDay  = wdVal === 0; // tatil veya haftasonu
+
+      // Toggle ON iken tooltip'te her iki değeri göster
+      const tipExtra = kiymetliAktiviteToggle && totalH > 0
+        ? `<br><span style="font-size:10px;color:var(--text3);">Toplam: ${totalH.toFixed(1)}h · Kıymetli: ${kiymetliH.toFixed(1)}h</span>`
+        : '';
+
+      let cellCls, cellContent, tipText;
+
+      if (isOffDay && totalH === 0) {
+        // Tatil/haftasonu, giriş yok
+        cellCls     = 'tc-cell tc-wknd';
+        cellContent = `<span style="opacity:0.3;">·</span>`;
+        tipText     = `${p}<br>${dt}<br>${isWknd ? 'Haftasonu' : 'Tatil'}`;
+      } else if (isOffDay && totalH > 0) {
+        // Tatil/haftasonu ama giriş var
+        cellCls     = 'tc-cell tc-offday';
+        cellContent = mode === 'status' ? '📌' : `${totalH % 1 === 0 ? totalH : totalH.toFixed(1)}`;
+        tipText     = `${escHtml(p)}<br>${dt}<br>📌 ${isWknd ? 'Haftasonu' : 'Tatil'} · ${totalH.toFixed(1)}h giriş${tipExtra}`;
+      } else if (wdVal > 0 && totalH === 0) {
+        // İş günü, hiç giriş yok
+        cellCls     = 'tc-cell tc-zero';
+        cellContent = mode === 'status' ? '—' : '<span style="font-size:10px;opacity:0.4;">0</span>';
+        tipText     = `${escHtml(p)}<br>${dt}<br>❗ Saat girişi yok`;
+      } else if (wdVal > 0 && kiymetliAktiviteToggle && kiymetliH === 0 && totalH > 0) {
+        // İş günü var, toplam saat var ama kıymetli saat yok — tümü kıymetsiz
+        cellCls     = 'tc-cell tc-zero';
+        cellContent = mode === 'status' ? '✗' : '<span style="font-size:10px;opacity:0.5;">✗</span>';
+        tipText     = `${escHtml(p)}<br>${dt}<br>❌ Kıymetli saat yok (${totalH.toFixed(1)}h kıymetsiz)`;
+      } else {
+        // İş günü ve baz saat > 0 — yarım gün desteği + toggle
+        const expectedH = wdVal * 8; // tam gün=8, yarım gün=4
+        const halfTag   = isHalfD ? ` (½ gün, beklenti: ${expectedH}h)` : '';
+        const dispH     = hours; // toggle'a göre zaten ayarlandı
+        const fmt       = (h) => h % 1 === 0 ? String(h) : h.toFixed(1);
+        if (dispH > expectedH) {
+          cellCls     = 'tc-cell tc-over';
+          cellContent = mode === 'status' ? '⚡' : fmt(dispH);
+          tipText     = `${escHtml(p)}<br>${dt}<br>⚡ ${dispH.toFixed(1)}h — Mesai${halfTag}${tipExtra}`;
+        } else if (dispH >= expectedH) {
+          cellCls     = 'tc-cell tc-full';
+          cellContent = mode === 'status' ? '✓' : fmt(dispH);
+          tipText     = `${escHtml(p)}<br>${dt}<br>✓ ${dispH.toFixed(1)}h — Tam${halfTag}${tipExtra}`;
+        } else {
+          // 0 < dispH < expectedH
+          cellCls     = 'tc-cell tc-under';
+          cellContent = mode === 'status' ? '↓' : fmt(dispH);
+          tipText     = `${escHtml(p)}<br>${dt}<br>↓ ${dispH.toFixed(1)}h — Eksik${halfTag}${tipExtra}`;
+        }
+      }
+
+      html += `<td class="${cellCls}">
+        ${cellContent}
+        <div class="tc-tip">${tipText}</div>
+      </td>`;
+    });
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+
+  // Kişi başına toplam satırı (tfoot) — toggle'a göre
+  const tfootLabel = kiymetliAktiviteToggle ? 'Kıymetli ✦' : 'Toplam';
+  let tfootHtml = `<tfoot><tr>
+    <td class="tc-day-col" style="font-size:11px;color:${kiymetliAktiviteToggle ? 'var(--accent)' : 'var(--text2)'};font-weight:700;">${tfootLabel}</td>`;
+  persons.forEach(p => {
+    const dispTotal = kiymetliAktiviteToggle ? (personKiymetliHours[p] || 0) : (personHours[p] || 0);
+    tfootHtml += `<td class="tc-cell" style="background:var(--surface2);color:${kiymetliAktiviteToggle ? 'var(--accent)' : 'var(--accent)'};font-size:11px;font-weight:700;">${dispTotal.toFixed(0)}h</td>`;
+  });
+  tfootHtml += '</tr></tfoot>';
+
+  // tfoot'u tbody'den önce kapanışa ekle
+  html = html.replace('</tbody></table>', `</tbody>${tfootHtml}</table>`);
+
+  container.innerHTML = `<div class="card"><div>${legendHtml}</div><div class="tc-wrap">${html}</div></div>`;
+}
+
+// ================================================================
+// CHART HELPERS
+// ================================================================
+function renderDoughnut(id, labels, data, colors) {
+  destroyChart(id);
+  const total = data.reduce((s, v) => s + v, 0);
+  chartInstances[id] = new Chart(document.getElementById(id), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors.map(c => c + 'cc'),
+        borderColor: colors,
+        borderWidth: 1,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '60%',
+      layout: { padding: 8 },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          align: 'center',
+          labels: {
+            color: '#e2e8f0',
+            font: { size: 11 },
+            boxWidth: 12,
+            padding: 10,
+            generateLabels: (chart) => {
+              const ds = chart.data.datasets[0];
+              return chart.data.labels.map((label, i) => ({
+                text: `${label.length > 18 ? label.substring(0,18)+'…' : label} (${total > 0 ? (ds.data[i]/total*100).toFixed(0) : 0}%)`,
+                fillStyle: ds.backgroundColor[i],
+                strokeStyle: ds.borderColor[i],
+                lineWidth: 1,
+                fontColor: '#e2e8f0',
+                index: i,
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.raw.toFixed(1)}h (${total > 0 ? (ctx.raw/total*100).toFixed(1) : 0}%)`
+          }
+        }
+      }
+    }
+  });
+}
+
+function destroyChart(id) {
+  if (chartInstances[id]) {
+    chartInstances[id].destroy();
+    delete chartInstances[id];
+  }
+}
+
+// ================================================================
+// UTILITIES
+// ================================================================
+function fmtDate(y, m, d) {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sortProjectTable(col) {
+  // Simple client-side sort toggle - re-use renderProjects with modified sort
+  const sel = document.getElementById('proj-sort');
+  if (col === 'hours') sel.value = 'hours';
+  else if (col === 'people') sel.value = 'people';
+  else if (col === 'name') sel.value = 'alpha';
+  renderProjects();
+}
+
+// Keyboard shortcuts 1-5 for quick tab navigation
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const pages = ['upload', 'person', 'projects', 'compare', 'heatmap'];
+  const idx = parseInt(e.key) - 1;
+  if (idx >= 0 && idx < pages.length) {
+    showPage(pages[idx]);
+  }
+});
+
+// ================================================================
+// UPLOAD ZONE — tıklama + sürükle-bırak
+// ================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  const zone  = document.getElementById('upload-zone');
+  const input = document.getElementById('file-input');
+
+  // Tıklama → file dialog
+  zone.addEventListener('click', function() {
+    input.value = '';   // aynı dosya tekrar seçilebilsin
+    input.click();
+  });
+
+  // Dosya seçildi
+  input.addEventListener('change', function() {
+    if (this.files && this.files[0]) processFile(this.files[0]);
+  });
+
+  // Sürükle-bırak
+  zone.addEventListener('dragover',  function(e) { e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', function(e) { zone.classList.remove('drag'); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    zone.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+});
+</script>
+</body>
+</html>
